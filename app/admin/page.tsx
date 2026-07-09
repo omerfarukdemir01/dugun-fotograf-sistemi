@@ -1,20 +1,47 @@
-"use client"; // Bu sayfa üzerinde buton tıklamaları ve formlar olacağı için istemci taraflı çalışacağını belirttik
+"use client";
+import Link from "next/link";
+import { useState, useEffect } from "react";
 
-import { useState } from "react";
+// Bir galerinin sahip olduğu veri yapısını TypeScript'e tanıtıyoruz
+interface IGallery {
+  _id: string;
+  title: string;
+  date: string;
+  photoCount: number;
+}
 
 export default function AdminPage() {
-  // Pop-up formun açık mı kapalı mı olduğunu tutan durum (state)
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Form alanlarındaki verileri tutan durumlar
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
+  
+  // Veritabanından gelecek olan galerileri tutacağımız durum
+  const [galleries, setGalleries] = useState<IGallery[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Sayfa ilk açıldığında veritabanındaki galerileri getiren fonksiyon
+  const fetchGalleries = async () => {
+    try {
+      const response = await fetch("/api/galleries");
+      const resData = await response.json();
+      if (resData.success) {
+        setGalleries(resData.data);
+      }
+    } catch (error) {
+      console.error("Galeriler getirilirken hata:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // useEffect yardımıyla sayfa yüklenir yüklenmez yukarıdaki fonksiyonu tetikliyoruz
+  useEffect(() => {
+    fetchGalleries();
+  }, []);
 
   const handleCreateGallery = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
-      // Yazdığımız /api/galleries postacısına verileri paketleyip gönderiyoruz
       const response = await fetch("/api/galleries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -25,15 +52,15 @@ export default function AdminPage() {
 
       if (resData.success) {
         alert("Harika! Galeri başarıyla MongoDB veritabanına kaydedildi.");
-        setIsOpen(false); // Pop-up formu kapat
-        setTitle("");     // Formu temizle
-        setDate("");      // Tarihi temizle
+        setIsOpen(false);
+        setTitle("");
+        setDate("");
+        fetchGalleries(); // Yeni galeri eklenince listeyi otomatik yenile
       } else {
         alert("Bir hata oluştu: " + resData.error);
       }
     } catch (error) {
       console.error("İstek gönderilirken hata oluştu:", error);
-      alert("Sunucuya bağlanılamadı.");
     }
   };
 
@@ -60,7 +87,6 @@ export default function AdminPage() {
         
         <div className="mb-8 flex items-center justify-between">
           <h2 className="text-2xl font-semibold text-zinc-900">Galeriler</h2>
-          {/* Butona basıldığında isOpen durumunu true yaparak formu açıyoruz */}
           <button 
             onClick={() => setIsOpen(true)}
             className="flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800"
@@ -69,34 +95,50 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Galeri Kartları Listesi */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md">
-            <div className="relative aspect-video w-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-              Kapak Fotoğrafı
-            </div>
-            <div className="p-5">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-semibold text-zinc-900">Ahmet & Ayşe</h3>
-                <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                  Aktif
-                </span>
-              </div>
-              <p className="mb-4 text-sm text-zinc-500">15 Ağustos 2026 • 0 Fotoğraf</p>
-              <div className="mt-4 flex gap-2">
-                <button className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200">
-                  Düzenle
-                </button>
-                <button className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800">
-                  Fotoğraf Yükle
-                </button>
-              </div>
-            </div>
+        {/* Yükleniyor Durumu */}
+        {loading ? (
+          <div className="text-center py-12 text-zinc-500 text-sm">Galeriler yükleniyor...</div>
+        ) : galleries.length === 0 ? (
+          /* Eğer henüz hiç galeri yoksa gösterilecek alan */
+          <div className="text-center py-12 border-2 border-dashed border-zinc-200 rounded-2xl p-8 bg-white">
+            <p className="text-zinc-500 text-sm">Henüz hiç galeri oluşturulmamış.</p>
           </div>
-        </div>
+        ) : (
+          /* Veritabanındaki galerileri dönerek kartları ekrana basıyoruz */
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {galleries.map((gallery) => (
+              <div key={gallery._id} className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md">
+                <div className="relative aspect-video w-full bg-zinc-100 flex items-center justify-center text-zinc-400">
+                  Kapak Fotoğrafı
+                </div>
+                <div className="p-5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="font-semibold text-zinc-900">{gallery.title}</h3>
+                    <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                      Aktif
+                    </span>
+                  </div>
+                  <p className="mb-4 text-sm text-zinc-500">{gallery.date} • {gallery.photoCount} Fotoğraf</p>
+                  <div className="mt-4 flex gap-2">
+                    <button className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200">
+                      Düzenle
+                    </button>
+                    {/* İŞTE DEĞİŞTİRDİĞİMİZ KISIM BURASI: Button yerine Link kullandık */}
+                    <Link 
+                      href={`/admin/gallery/${gallery._id}`}
+                      className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+                    >
+                      Fotoğraf Yükle
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
-      {/* GİZLİ POP-UP (MODAL) FORM ALANI */}
+      {/* POP-UP FORM ALANI */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl ring-1 ring-zinc-200">
@@ -126,17 +168,10 @@ export default function AdminPage() {
               </div>
 
               <div className="mt-6 flex justify-end gap-3 border-t pt-4">
-                <button 
-                  type="button" 
-                  onClick={() => setIsOpen(false)}
-                  className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-200"
-                >
+                <button type="button" onClick={() => setIsOpen(false)} className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-200">
                   İptal
                 </button>
-                <button 
-                  type="submit" 
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-                >
+                <button type="submit" className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
                   Galeri Oluştur
                 </button>
               </div>

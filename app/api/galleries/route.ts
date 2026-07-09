@@ -29,3 +29,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Veritabanına kaydedilirken bir hata oluştu." }, { status: 500 });
   }
 }
+// GET isteği: Veritabanındaki tüm galerileri çekip listelemek için kullanılır
+export async function GET() {
+  try {
+    // 1. Veritabanına bağlan
+    await connectToDatabase();
+
+    // 2. Tüm galerileri oluşturulma tarihine göre en yeni en üstte olacak şekilde çek
+    const galleries = await Gallery.find({}).sort({ createdAt: -1 });
+
+    // 3. Verileri tarayıcıya başarıyla dön
+    return NextResponse.json({ success: true, data: galleries }, { status: 200 });
+    
+  } catch (error) {
+    console.error("API GET Hatası:", error);
+    return NextResponse.json({ error: "Galeriler yüklenirken bir hata oluştu." }, { status: 500 });
+  }
+}
