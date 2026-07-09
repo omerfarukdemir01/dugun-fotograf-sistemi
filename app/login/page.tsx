@@ -1,85 +1,91 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
 export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(false);
+
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Giriş başarılıysa tarayıcı hafızasına (session) küçük bir kilit anahtarı bırakıyoruz
+        localStorage.setItem("isAdminAuthenticated", "true");
+        // Ve admin paneline uçuruyoruz
+        router.push("/admin");
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError("Sunucuyla bağlantı kurulamadı.");
+    }
+  };
+
   return (
-    // Ekranı ikiye böleceğimiz ana kapsayıcı
-    <div className="flex min-h-screen font-sans bg-white">
-      
-      {/* SOL TARAF: Görsel ve Marka Alanı (Sadece büyük ekranlarda görünür) */}
-      <div className="relative hidden w-1/2 flex-col justify-between bg-zinc-900 p-12 text-white lg:flex">
-        {/* İleride buraya <Image /> etiketiyle gerçek bir fotoğraf eklenebilir, şimdilik şık bir desen/renk */}
-        <div className="absolute inset-0 bg-zinc-900 bg-[url('https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=2069&auto=format&fit=crop')] bg-cover bg-center bg-no-repeat opacity-40 mix-blend-overlay"></div>
+    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4 font-sans">
+      <div className="w-full max-w-md bg-white rounded-2xl p-8 shadow-sm ring-1 ring-zinc-200">
         
-        {/* Sol Üst Logo */}
-        <div className="relative z-10">
-          <h2 className="text-3xl font-light tracking-wide">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-light tracking-wide text-zinc-900">
             Studio<span className="font-bold">Panel</span>
-          </h2>
-        </div>
-
-        {/* Sol Alt Karşılama Metni */}
-        <div className="relative z-10 mt-auto max-w-md">
-          <h1 className="text-4xl font-semibold tracking-tight">
-            Anıları güvenle paylaşın.
           </h1>
-          <p className="mt-4 text-lg text-zinc-300">
-            Müşterilerinize özel galeriler oluşturun, fotoğrafları yüksek kalitede sunun ve favori seçimlerini tek bir ekrandan kolayca yönetin.
-          </p>
+          <p className="text-sm text-zinc-500 mt-1">Lütfen yönetim paneline giriş yapın.</p>
         </div>
-      </div>
 
-      {/* SAĞ TARAF: Giriş Formu */}
-      <div className="flex w-full items-center justify-center p-8 lg:w-1/2">
-        <div className="w-full max-w-md">
-          
-          {/* Mobil ekranlar için Logo (Sadece mobilde görünür) */}
-          <div className="mb-10 text-center lg:hidden">
-             <h2 className="text-3xl font-light tracking-wide text-zinc-900">
-              Studio<span className="font-bold">Panel</span>
-            </h2>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-zinc-700">Kullanıcı Adı</label>
+            <input 
+              type="text" 
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="mt-2 block w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+            />
           </div>
 
-          <div className="mb-10">
-            <h3 className="text-2xl font-semibold text-zinc-900">Hoş Geldiniz</h3>
-            <p className="mt-2 text-sm text-zinc-500">
-              Yönetim paneline erişmek için lütfen giriş yapın.
-            </p>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700">Şifre</label>
+            <input 
+              type="password" 
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-2 block w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+            />
           </div>
 
-          <form className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">Kullanıcı Adı</label>
-              <input 
-                type="text" 
-                placeholder="admin" 
-                className="mt-2 block w-full rounded-lg border border-zinc-300 px-4 py-3 text-zinc-900 transition-colors placeholder-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">Şifre</label>
-              <input 
-                type="password" 
-                placeholder="••••••••" 
-                className="mt-2 block w-full rounded-lg border border-zinc-300 px-4 py-3 text-zinc-900 transition-colors placeholder-zinc-400 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input id="remember-me" type="checkbox" className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-zinc-700">Beni hatırla</label>
-              </div>
-              <a href="#" className="text-sm font-medium text-zinc-900 hover:underline">Şifremi unuttum</a>
-            </div>
-
-            <button 
-              type="button" 
-              className="mt-4 flex w-full justify-center rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2"
-            >
-              Giriş Yap
-            </button>
-          </form>
-        </div>
+          <button 
+            type="submit" 
+            className="w-full mt-6 rounded-lg bg-zinc-900 py-3 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 transition-colors"
+          >
+            Giriş Yap
+          </button>
+        </form>
       </div>
-      
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image"; // Next.js'in optimize edilmiş resim bileşeni
+import Image from "next/image";
 
 interface IPhoto {
   _id: string;
@@ -17,8 +17,10 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   const [isUploading, setIsUploading] = useState(false);
   const [photos, setPhotos] = useState<IPhoto[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // EKLENEN KISIM: Tıklanan fotoğrafı büyük göstermek için hafıza
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  // Bu galeriye ait fotoğrafları veritabanından çeken fonksiyon
   const fetchPhotos = async () => {
     try {
       const response = await fetch(`/api/photos?galleryId=${galleryId}`);
@@ -33,7 +35,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  // Sayfa yüklendiğinde fotoğrafları getir
   useEffect(() => {
     fetchPhotos();
   }, [galleryId]);
@@ -58,7 +59,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
       const resData = await response.json();
 
       if (resData.success) {
-        // Yükleme başarılı olunca listeyi hemen yenile
         fetchPhotos(); 
       } else {
         alert("Hata: " + resData.error);
@@ -110,7 +110,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          {/* EKLENEN KISIM: FOTOĞRAF GALERİSİ */}
           <h3 className="text-lg font-semibold text-zinc-900 mb-6">Yüklenen Fotoğraflar ({photos.length})</h3>
           
           {loading ? (
@@ -122,7 +121,12 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {photos.map((photo) => (
-                <div key={photo._id} className="group relative aspect-square overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200">
+                <div 
+                  key={photo._id} 
+                  // EKLENEN KISIM: onClick özelliği ile seçili resmi ayarlıyoruz ve imleci büyüteç yapıyoruz
+                  onClick={() => setSelectedImage(photo.url)}
+                  className="group relative aspect-square overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200 cursor-zoom-in"
+                >
                   <Image 
                     src={photo.url} 
                     alt="Düğün Fotoğrafı"
@@ -130,9 +134,14 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                     sizes="(max-width: 768px) 50vw, 20vw"
                   />
-                  {/* Fotoğraf silme butonu eklenebilir (Şimdilik görsel) */}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="bg-red-500 text-white p-1.5 rounded-md text-xs hover:bg-red-600">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation(); // Butona tıklayınca fotoğrafı büyütmemesi için durduruyoruz
+                        alert("Silme işlemi yakında eklenecek!");
+                      }}
+                      className="bg-red-500 text-white p-1.5 rounded-md text-xs hover:bg-red-600 shadow-sm"
+                    >
                       Sil
                     </button>
                   </div>
@@ -140,9 +149,32 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
               ))}
             </div>
           )}
-          
         </div>
       </main>
+
+      {/* EKLENEN KISIM: BÜYÜK RESİM GÖSTERME MODALI */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm cursor-zoom-out"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-zinc-400 hover:text-white text-2xl"
+            onClick={() => setSelectedImage(null)}
+          >
+            ✕
+          </button>
+          
+          <div className="relative max-w-5xl max-h-[90vh] overflow-hidden rounded-lg shadow-2xl">
+            <img 
+              src={selectedImage} 
+              alt="Büyük Görünüm" 
+              className="max-w-full max-h-[85vh] object-contain select-none"
+            />
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

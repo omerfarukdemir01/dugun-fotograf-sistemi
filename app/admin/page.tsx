@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // 1. EKLENEN KISIM: Yönlendirme aracı
 
 // Bir galerinin sahip olduğu veri yapısını TypeScript'e tanıtıyoruz
 interface IGallery {
@@ -11,6 +12,18 @@ interface IGallery {
 }
 
 export default function AdminPage() {
+  const router = useRouter(); // Yönlendiriciyi başlattık
+  
+  // 2. EKLENEN KISIM: Güvenlik Bekçisi
+  // Sayfa açılır açılmaz tarayıcı hafızasına (localStorage) bakar
+  useEffect(() => {
+    const auth = localStorage.getItem("isAdminAuthenticated");
+    if (auth !== "true") {
+      // Eğer kilit anahtarı yoksa kapıdan içeri almaz, logine yollar
+      router.push("/login");
+    }
+  }, [router]);
+
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -75,9 +88,18 @@ export default function AdminPage() {
           </h1>
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-zinc-600">Hoş geldin, Admin</span>
-            <button className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200">
+            
+            {/* 3. EKLENEN KISIM: Çıkış Yap butonu aktif edildi */}
+            <button 
+              onClick={() => {
+                localStorage.removeItem("isAdminAuthenticated");
+                router.push("/login");
+              }}
+              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
+            >
               Çıkış Yap
             </button>
+            
           </div>
         </div>
       </header>
@@ -123,7 +145,6 @@ export default function AdminPage() {
                     <button className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200">
                       Düzenle
                     </button>
-                    {/* İŞTE DEĞİŞTİRDİĞİMİZ KISIM BURASI: Button yerine Link kullandık */}
                     <Link 
                       href={`/admin/gallery/${gallery._id}`}
                       className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-800"
