@@ -27,3 +27,50 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Fotoğraflar yüklenirken bir hata oluştu." }, { status: 500 });
   }
 }
+import { unlink } from "fs/promises";
+import path from "path";
+import Gallery from "@/models/Gallery";
+
+// ... (Burada daha önce yazdığımız GET fonksiyonu duruyor olacak, ona dokunma)
+
+// Fotoğraf silme (DELETE) işlemi
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const photoId = searchParams.get("id");
+
+    if (!photoId) {
+      return NextResponse.json({ error: "Fotoğraf ID bulunamadı." }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    // 1. Silinecek fotoğrafı veritabanında bul
+    const photo = await Photo.findById(photoId);
+    if (!photo) {
+      return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 404 });
+    }
+
+    // 2. Fotoğrafı bilgisayarın diskinden (public/uploads) fiziksel olarak sil
+    try {
+      const filePath = path.join(process.cwd(), "public", photo.url);
+      await unlink(filePath);
+    } catch (err) {
+      console.error("Dosya diskten silinemedi (Zaten silinmiş olabilir):", err);
+    }
+
+    // 3. Fotoğrafı veritabanından sil
+    await Photo.findByIdAndDelete(photoId);
+
+    // 4. Galerinin toplam fotoğraf sayısını 1 azalt
+    await Gallery.findByIdAndUpdate(photo.galleryId, {
+      $inc: { photoCount: -1 }
+    });
+
+    return NextResponse.json({ success: true, message: "Fotoğraf başarıyla silindi." });
+
+  } catch (error) {
+    console.error("Silme Hatası:", error);
+    return NextResponse.json({ error: "Fotoğraf silinirken bir hata oluştu." }, { status: 500 });
+  }
+}
