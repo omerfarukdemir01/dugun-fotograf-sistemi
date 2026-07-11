@@ -3,13 +3,14 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-// Bir galerinin sahip olduğu veri yapısını TypeScript'e tanıtıyoruz
+// GÜNCELLENDİ: TypeScript'e coverImage (Kapak fotoğrafı) özelliğini tanıttık
 interface IGallery {
   _id: string;
   title: string;
   date: string;
   photoCount: number;
-  description?: string; // EKLENDİ
+  description?: string;
+  coverImage?: string; 
 }
 
 export default function AdminPage() {
@@ -120,19 +121,26 @@ export default function AdminPage() {
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {galleries.map((gallery) => (
               <div key={gallery._id} className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md">
-                <div className="relative aspect-[4/3] w-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-                  Kapak Fotoğrafı
+                
+                {/* GÜNCELLENEN KISIM: Kapak fotoğrafı varsa göster, yoksa gri alan göster */}
+                <div className="relative aspect-[4/3] w-full bg-zinc-100 flex items-center justify-center text-zinc-400 overflow-hidden">
+                  {gallery.coverImage ? (
+                    <img 
+                      src={gallery.coverImage} 
+                      alt={gallery.title} 
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <span className="text-sm">Kapak Fotoğrafı Yok</span>
+                  )}
                 </div>
+
                 <div className="p-5 flex flex-col flex-1">
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-zinc-900 leading-tight">{gallery.title}</h3>
-                    <span className="shrink-0 inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                      Aktif
-                    </span>
                   </div>
                   <p className="mb-3 text-xs text-zinc-500 font-medium">{gallery.date} • {gallery.photoCount} Fotoğraf</p>
                   
-                  {/* GÜNCELLENEN KISIM: Veritabanından gelen açıklama kartlara eklendi */}
                   {gallery.description && (
                     <p className="mb-4 text-sm text-zinc-600 line-clamp-2 border-l-2 border-zinc-200 pl-2">
                       {gallery.description}
@@ -140,9 +148,6 @@ export default function AdminPage() {
                   )}
 
                   <div className="mt-auto pt-4 flex gap-2">
-                    <button className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200 cursor-not-allowed opacity-50">
-                      Düzenle
-                    </button>
                     <Link 
                       href={`/admin/gallery/${gallery._id}`}
                       className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-800"
