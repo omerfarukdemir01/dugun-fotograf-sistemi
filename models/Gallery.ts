@@ -7,10 +7,14 @@ const GallerySchema = new Schema({
   description: { type: String },
   photoCount: { type: Number, default: 0 },
   
-  // YENİ EKLENEN ÖZELLİKLER
+  // ÖNCEKİ ÖZELLİKLER
   password: { type: String, default: "" }, // Şifre boşsa herkes direkt girebilir
   isActive: { type: Boolean, default: true }, // Yeni açılan galeriler otomatik aktiftir
   coverImage: { type: String, default: "" }, // Kapak fotoğrafının dosya yolu (URL)
+  
+  // YENİ EKLENEN: SİPARİŞ VE BİLDİRİM YÖNETİMİ
+  isSelectionCompleted: { type: Boolean, default: false }, // Müşteri seçimi bitirdi mi?
+  isNotificationRead: { type: Boolean, default: false }, // Admin bu bildirimi okudu mu?
   
   createdAt: { type: Date, default: Date.now }
 });

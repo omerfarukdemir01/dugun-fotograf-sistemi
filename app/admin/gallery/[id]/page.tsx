@@ -20,6 +20,8 @@ interface IGallery {
   password?: string;
   isActive?: boolean;
   coverImage?: string;
+  isSelectionCompleted?: boolean;
+  isNotificationRead?: boolean;
 }
 
 export default function GalleryDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -82,6 +84,58 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     fetchPhotos();
     fetchGalleryInfo();
   }, [galleryId]);
+
+  useEffect(() => {
+    if (gallery?.isSelectionCompleted && gallery?.isNotificationRead === false) {
+      const markAsRead = async () => {
+        try {
+          await fetch(`/api/gallery-info?id=${galleryId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...gallery, isNotificationRead: true })
+          });
+          setGallery(prev => prev ? { ...prev, isNotificationRead: true } : null);
+        } catch (error) {
+          console.error("Bildirim okundu işaretlenemedi", error);
+        }
+      };
+      markAsRead();
+    }
+  }, [gallery, galleryId]);
+
+  const handleCopyFileNames = () => {
+    const favoritePhotos = photos.filter(p => p.isFavorite);
+    if (favoritePhotos.length === 0) return;
+    
+    const fileNames = favoritePhotos.map(p => {
+      const fileName = p.url.substring(p.url.lastIndexOf('/') + 1).split('?')[0];
+      return decodeURIComponent(fileName);
+    }).join(', ');
+    
+    navigator.clipboard.writeText(fileNames);
+    alert(`${favoritePhotos.length} adet fotoğrafın ismi panoya kopyalandı!\n\nLightroom veya bilgisayarınızdaki klasör arama kutusuna yapıştırarak fotoğrafları saniyeler içinde bulabilirsiniz.`);
+  };
+
+  // YENİ: MÜŞTERİ SEÇİMİNİ İPTAL EDİP KİLİDİ AÇMA FONKSİYONU
+  const handleUnlockSelection = async () => {
+    if (!window.confirm("DİKKAT: Galeriyi yeniden seçime açmak istediğinize emin misiniz?\n\nMüşteri tekrar seçim ekleyip çıkarabilecektir.")) return;
+    
+    try {
+      const response = await fetch(`/api/gallery-info?id=${galleryId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...gallery, isSelectionCompleted: false, isNotificationRead: false })
+      });
+      const resData = await response.json();
+      
+      if (resData.success) {
+        setGallery(resData.data);
+        alert("Galeri kilidi başarıyla açıldı! Müşteri tekrar seçim yapabilir.");
+      }
+    } catch (error) {
+      alert("Hata oluştu.");
+    }
+  };
 
   const addWatermarkToImage = (file: File, text: string): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -292,9 +346,25 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-zinc-200 mb-8">
-          <div className="flex items-center gap-3 mb-2">
+        <div className={`bg-white p-6 sm:p-8 rounded-2xl shadow-sm mb-8 border transition-all ${gallery?.isSelectionCompleted ? 'border-green-300 bg-green-50/40' : 'border-zinc-200'}`}>
+          <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">{gallery?.title}</h1>
+            
+            {/* GÜNCELLENDİ: "Kilidi Aç" Butonu eklendi */}
+            {gallery?.isSelectionCompleted && (
+              <div className="flex items-center gap-2">
+                <span className="bg-green-600 text-white text-xs px-2.5 py-1 rounded-full font-bold shadow-sm">
+                  ✓ Müşteri Seçimi Tamamladı
+                </span>
+                <button 
+                  onClick={handleUnlockSelection}
+                  className="bg-white hover:bg-zinc-100 text-zinc-700 text-xs px-2.5 py-1 rounded-full font-semibold border border-zinc-300 shadow-sm transition-colors"
+                >
+                  🔓 Kilidi Aç
+                </button>
+              </div>
+            )}
+
             {gallery?.isActive ? (
               <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium">Aktif</span>
             ) : (
@@ -381,21 +451,33 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
             {showOnlyFavorites ? 'Favori Fotoğraflar' : 'Tüm Fotoğraflar'} ({displayedPhotos.length})
           </h3>
           
-          {favoriteCount > 0 && (
-            <button
-              onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                showOnlyFavorites 
-                  ? 'bg-red-500 text-white shadow-md' 
-                  : 'bg-red-50 text-red-600 hover:bg-red-100 ring-1 ring-inset ring-red-600/20'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                <path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.582-1.9C4.045 12.733 2 10.352 2 7.5a4.5 4.5 0 018-2.828A4.5 4.5 0 0118 7.5c0 2.852-2.044 5.233-3.885 6.82a22.049 22.049 0 01-3.744 2.582l-.019.01-.005.003h-.002a.739.739 0 01-.69.001l-.002-.001z" />
-              </svg>
-              {showOnlyFavorites ? `Tüm Fotoğraflara Dön (${photos.length})` : `Sadece Favorileri Göster (${favoriteCount})`}
-            </button>
-          )}
+          <div className="flex gap-2">
+            {favoriteCount > 0 && (
+              <button 
+                onClick={handleCopyFileNames} 
+                className="flex items-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-full text-sm font-medium transition-colors border border-blue-200"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+                İsimleri Kopyala
+              </button>
+            )}
+
+            {favoriteCount > 0 && (
+              <button
+                onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  showOnlyFavorites 
+                    ? 'bg-red-500 text-white shadow-md' 
+                    : 'bg-red-50 text-red-600 hover:bg-red-100 ring-1 ring-inset ring-red-600/20'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.582-1.9C4.045 12.733 2 10.352 2 7.5a4.5 4.5 0 018-2.828A4.5 4.5 0 0118 7.5c0 2.852-2.044 5.233-3.885 6.82a22.049 22.049 0 01-3.744 2.582l-.019.01-.005.003h-.002a.739.739 0 01-.69.001l-.002-.001z" />
+                </svg>
+                {showOnlyFavorites ? `Tüm Fotoğraflara Dön (${photos.length})` : `Sadece Favorileri Göster (${favoriteCount})`}
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -482,7 +564,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           )}
 
           <div className="relative max-w-6xl max-h-[90vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
-            {/* YENİ: Büyük ekranda favori durumu belirteci */}
             {displayedPhotos[selectedIndex]?.isFavorite && (
               <div className="absolute top-4 left-4 sm:left-0 bg-red-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 z-10 pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">

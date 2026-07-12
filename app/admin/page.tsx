@@ -1,9 +1,9 @@
 "use client";
+
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-// GÜNCELLENDİ: TypeScript'e coverImage (Kapak fotoğrafı) özelliğini tanıttık
 interface IGallery {
   _id: string;
   title: string;
@@ -11,6 +11,8 @@ interface IGallery {
   photoCount: number;
   description?: string;
   coverImage?: string; 
+  isSelectionCompleted?: boolean; // YENİ: Sipariş kilitli mi?
+  isNotificationRead?: boolean;   // YENİ: Admin bildirimi okudu mu?
 }
 
 export default function AdminPage() {
@@ -74,6 +76,9 @@ export default function AdminPage() {
     }
   };
 
+  // YENİ: Okunmamış ve seçimi tamamlanmış galerileri filtrele
+  const unreadNotifications = galleries.filter(g => g.isSelectionCompleted && !g.isNotificationRead);
+
   return (
     <div className="min-h-screen bg-zinc-50 font-sans">
       
@@ -111,6 +116,40 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* YENİ: BİLDİRİMLER PANOSU */}
+        {unreadNotifications.length > 0 && (
+          <div className="mb-10 bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm animate-fade-in-up">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
+              </span>
+              <h2 className="text-xl font-bold text-blue-900">Yeni Tamamlanan Seçimler</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {unreadNotifications.map(gallery => (
+                <Link 
+                  key={gallery._id} 
+                  href={`/admin/gallery/${gallery._id}`} 
+                  className="block bg-white p-4 rounded-xl border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-zinc-900 group-hover:text-blue-600 transition-colors">{gallery.title}</h3>
+                      <p className="text-sm text-zinc-500">Müşteri seçimini tamamladı!</p>
+                    </div>
+                    <div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold">
+                      →
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MEVCUT GALERİLER LİSTESİ */}
         {loading ? (
           <div className="text-center py-12 text-zinc-500 text-sm">Galeriler yükleniyor...</div>
         ) : galleries.length === 0 ? (
@@ -120,9 +159,15 @@ export default function AdminPage() {
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {galleries.map((gallery) => (
-              <div key={gallery._id} className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md">
+              <div key={gallery._id} className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md relative">
                 
-                {/* GÜNCELLENEN KISIM: Kapak fotoğrafı varsa göster, yoksa gri alan göster */}
+                {/* YENİ: Tamamlandı Rozeti */}
+                {gallery.isSelectionCompleted && (
+                  <div className="absolute top-3 right-3 z-10 bg-green-500 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 rounded-full shadow-md">
+                    Seçim Tamamlandı
+                  </div>
+                )}
+
                 <div className="relative aspect-[4/3] w-full bg-zinc-100 flex items-center justify-center text-zinc-400 overflow-hidden">
                   {gallery.coverImage ? (
                     <img 

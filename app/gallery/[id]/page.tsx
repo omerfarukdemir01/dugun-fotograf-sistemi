@@ -15,6 +15,7 @@ interface IGallery {
   password?: string;
   isActive: boolean;
   coverImage?: string;
+  isSelectionCompleted?: boolean;
 }
 
 export default function CustomerGalleryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,28 +33,7 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
-  const favoriteCount = photos.filter(photo => photo.isFavorite).length;
-  const displayedPhotos = showOnlyFavorites ? photos.filter(photo => photo.isFavorite) : photos;
-  
-  // YENİ: Seçili fotoğrafın indexini bul
-  const selectedPhoto = photos.find(p => p._id === selectedPhotoId);
-  const selectedIndex = displayedPhotos.findIndex(p => p._id === selectedPhotoId);
-
-  // YENİ: Klavye (Ok Tuşları) ve ESC ile gezinme
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedPhotoId) return;
-      if (e.key === "ArrowRight" && selectedIndex < displayedPhotos.length - 1) {
-        setSelectedPhotoId(displayedPhotos[selectedIndex + 1]._id);
-      } else if (e.key === "ArrowLeft" && selectedIndex > 0) {
-        setSelectedPhotoId(displayedPhotos[selectedIndex - 1]._id);
-      } else if (e.key === "Escape") {
-        setSelectedPhotoId(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedPhotoId, selectedIndex, displayedPhotos]);
+  const isLocked = gallery?.isSelectionCompleted;
 
   useEffect(() => {
     const fetchGalleryInfo = async () => {
@@ -101,6 +81,12 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
 
   const handleToggleFavorite = async (e: React.MouseEvent, photoId: string, currentStatus: boolean) => {
     e.stopPropagation(); 
+    
+    if (isLocked) {
+      alert("Seçiminiz stüdyoya iletilmiştir. Artık değişiklik yapılamaz.");
+      return;
+    }
+
     const newStatus = !currentStatus;
     setPhotos(photos.map(photo => photo._id === photoId ? { ...photo, isFavorite: newStatus } : photo));
 
@@ -119,13 +105,64 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const handleCompleteSelection = async () => {
+    const confirmLock = window.confirm(
+      "DİKKAT: Seçimlerinizi tamamlayıp stüdyoya iletmek üzeresiniz.\n\nBu işlemden sonra fotoğraflar üzerinde değişiklik (ekleme/çıkarma) yapamayacaksınız. Onaylıyor musunuz?"
+    );
+
+    if (!confirmLock) return;
+
+    try {
+      const dataToUpdate = { 
+        ...gallery, 
+        isSelectionCompleted: true, 
+        isNotificationRead: false 
+      };
+      const response = await fetch(`/api/gallery-info?id=${galleryId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dataToUpdate)
+      });
+      const resData = await response.json();
+      
+      if (resData.success) {
+        setGallery(resData.data);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        alert("İşlem sırasında bir hata oluştu.");
+      }
+    } catch (error) {
+      alert("Sunucuya bağlanılamadı.");
+    }
+  };
+
+  const favoriteCount = photos.filter(photo => photo.isFavorite).length;
+  const displayedPhotos = showOnlyFavorites ? photos.filter(photo => photo.isFavorite) : photos;
+  
+  const selectedPhoto = photos.find(p => p._id === selectedPhotoId);
+  const selectedIndex = displayedPhotos.findIndex(p => p._id === selectedPhotoId);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedPhotoId) return;
+      if (e.key === "ArrowRight" && selectedIndex < displayedPhotos.length - 1) {
+        setSelectedPhotoId(displayedPhotos[selectedIndex + 1]._id);
+      } else if (e.key === "ArrowLeft" && selectedIndex > 0) {
+        setSelectedPhotoId(displayedPhotos[selectedIndex - 1]._id);
+      } else if (e.key === "Escape") {
+        setSelectedPhotoId(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPhotoId, selectedIndex, displayedPhotos]);
+
   useEffect(() => {
     if (showOnlyFavorites && favoriteCount === 0) {
       setShowOnlyFavorites(false);
     }
   }, [favoriteCount, showOnlyFavorites]);
 
-  // YENİ: Tıklama ile Sonraki / Önceki Fonksiyonları
   const handleNext = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (selectedIndex < displayedPhotos.length - 1) {
@@ -183,7 +220,7 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-stone-800 font-sans selection:bg-rose-200 selection:text-stone-900">
+    <div className="min-h-screen bg-[#FAFAFA] text-stone-800 font-sans selection:bg-rose-200 selection:text-stone-900 relative">
       
       <header className={`absolute top-0 w-full z-40 p-8 ${gallery?.coverImage ? 'bg-gradient-to-b from-stone-900/60 to-transparent' : 'bg-transparent'}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -215,13 +252,37 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
         </div>
       )}
 
-      <main className="mx-auto max-w-7xl px-6 pb-32 pt-8">
-        {photos.length > 0 && favoriteCount > 0 && (
-          <div className="mb-16 flex justify-center">
-            <button onClick={() => setShowOnlyFavorites(!showOnlyFavorites)} className={`flex items-center gap-3 px-8 py-3 rounded-full text-sm tracking-widest uppercase transition-all duration-500 ${showOnlyFavorites ? 'bg-rose-100 text-rose-800 border border-rose-200 shadow-sm' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200 hover:border-stone-400 shadow-sm'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
-              {showOnlyFavorites ? `Tüm Koleksiyon (${photos.length})` : `Seçilenler (${favoriteCount})`}
-            </button>
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 pb-40 pt-8">
+        
+        {isLocked ? (
+          <div className="mb-16 flex flex-col items-center justify-center bg-stone-100/80 p-6 rounded-2xl border border-stone-200">
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-stone-800">
+                <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-serif text-stone-900 mb-2">Seçimleriniz İletildi</h3>
+            <p className="text-stone-500 text-sm font-light text-center">Toplam <span className="font-medium text-stone-800">{favoriteCount}</span> fotoğraf stüdyomuza başarıyla ulaştı. İlginiz için teşekkür ederiz.</p>
+          </div>
+        ) : (
+          <div className="mb-16 flex flex-col md:flex-row items-center justify-center gap-4">
+            {photos.length > 0 && favoriteCount > 0 && (
+              <>
+                <button onClick={() => setShowOnlyFavorites(!showOnlyFavorites)} className={`flex items-center justify-center gap-3 px-8 py-4 rounded-full text-sm tracking-widest uppercase transition-all duration-500 ${showOnlyFavorites ? 'bg-rose-100 text-rose-800 border border-rose-200 shadow-sm' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200 hover:border-stone-400 shadow-sm'}`}>
+                  {showOnlyFavorites ? `Tüm Koleksiyon (${photos.length})` : `Seçilenler (${favoriteCount})`}
+                </button>
+                
+                <button 
+                  onClick={handleCompleteSelection} 
+                  className="flex items-center justify-center gap-3 px-8 py-4 rounded-full text-sm tracking-widest uppercase bg-stone-900 text-white hover:bg-stone-700 transition-all duration-500 shadow-xl shadow-stone-900/20"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                    <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.493-12.739a.75.75 0 011.04-.208z" clipRule="evenodd" />
+                  </svg>
+                  Seçimi Tamamla
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -231,27 +292,44 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
             <p className="text-sm">Sanatsal dokunuşlar tamamlandığında fotoğraflarınız burada yerini alacak.</p>
           </div>
         ) : (
-          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
             {displayedPhotos.map((photo) => (
-              <div key={photo._id} onClick={() => setSelectedPhotoId(photo._id)} className="break-inside-avoid overflow-hidden bg-white shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-all duration-500 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] cursor-zoom-in group relative">
-                <img src={photo.url} alt="Galeri Karesi" className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div className={`absolute top-4 right-4 z-10 transition-opacity duration-500 ${photo.isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                  <button onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
-                  </button>
-                </div>
+              <div 
+                key={photo._id} 
+                onClick={() => setSelectedPhotoId(photo._id)} 
+                className="group relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-white shadow-sm transition-all duration-500 hover:-translate-y-1 hover:shadow-xl cursor-zoom-in border border-stone-100"
+              >
+                <img 
+                  src={photo.url} 
+                  alt="Galeri Karesi" 
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                />
+                
+                {isLocked ? (
+                  photo.isFavorite && (
+                     <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10">
+                       <div className="flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full bg-rose-400/90 text-white shadow-sm cursor-default">
+                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                       </div>
+                     </div>
+                  )
+                ) : (
+                  <div className={`absolute top-3 right-3 md:top-4 md:right-4 z-10 transition-opacity duration-500 ${photo.isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    <button onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </main>
 
-      {/* YENİ: OK TUŞLARI EKLENMİŞ LIGHTBOX */}
       {selectedPhoto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111111]/95 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPhotoId(null)}>
           <button className="absolute top-8 right-8 text-stone-400 hover:text-white text-sm tracking-widest uppercase z-50 transition-colors" onClick={() => setSelectedPhotoId(null)}>Kapat ✕</button>
           
-          {/* SOL OK */}
           {selectedIndex > 0 && (
             <button onClick={handlePrev} className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
@@ -260,15 +338,24 @@ export default function CustomerGalleryPage({ params }: { params: Promise<{ id: 
 
           <div className="relative max-w-6xl max-h-[90vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
             <img src={selectedPhoto.url} alt="Büyük Görünüm" className="max-w-full max-h-[80vh] object-contain select-none shadow-2xl px-4 sm:px-0" />
+            
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2">
-              <button onClick={(e) => handleToggleFavorite(e, selectedPhoto._id, !!selectedPhoto.isFavorite)} className={`flex items-center gap-3 px-8 py-3 rounded-full text-sm tracking-widest uppercase transition-all duration-300 ${selectedPhoto.isFavorite ? 'bg-rose-100 text-rose-800' : 'bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white backdrop-blur-md'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
-                {selectedPhoto.isFavorite ? 'Seçildi' : 'Seçime Ekle'}
-              </button>
+              {isLocked ? (
+                selectedPhoto.isFavorite && (
+                  <div className="px-8 py-3 rounded-full text-sm tracking-widest uppercase bg-stone-900 text-stone-300 border border-stone-800 flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-rose-400"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                    Seçildi
+                  </div>
+                )
+              ) : (
+                <button onClick={(e) => handleToggleFavorite(e, selectedPhoto._id, !!selectedPhoto.isFavorite)} className={`flex items-center gap-3 px-8 py-3 rounded-full text-sm tracking-widest uppercase transition-all duration-300 ${selectedPhoto.isFavorite ? 'bg-rose-100 text-rose-800' : 'bg-white/10 text-stone-300 hover:bg-white/20 hover:text-white backdrop-blur-md'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                  {selectedPhoto.isFavorite ? 'Seçildi' : 'Seçime Ekle'}
+                </button>
+              )}
             </div>
           </div>
 
-          {/* SAĞ OK */}
           {selectedIndex < displayedPhotos.length - 1 && (
             <button onClick={handleNext} className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>

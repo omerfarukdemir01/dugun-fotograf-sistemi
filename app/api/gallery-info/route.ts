@@ -32,18 +32,29 @@ export async function PUT(request: Request) {
 
     await connectToDatabase();
     
-    // YENİ EKLENEN KISIM: Şifre, Aktiflik ve Kapak Fotoğrafı da artık güncelleniyor
+    // Güncellenecek standart veriler
+    const updateData: any = {
+      title: body.title,
+      coupleName: body.coupleName,
+      date: body.eventDate, 
+      description: body.description,
+      password: body.password !== undefined ? body.password : "", 
+      isActive: body.isActive !== undefined ? body.isActive : true,
+      coverImage: body.coverImage
+    };
+
+    // YENİ EKLENEN KISIM: Sipariş Kilidi ve Bildirim Verileri
+    // Eğer frontend'den (müşteri veya admin sayfasından) bu veriler geldiyse veritabanına yaz
+    if (body.isSelectionCompleted !== undefined) {
+      updateData.isSelectionCompleted = body.isSelectionCompleted;
+    }
+    if (body.isNotificationRead !== undefined) {
+      updateData.isNotificationRead = body.isNotificationRead;
+    }
+
     const updatedGallery = await Gallery.findByIdAndUpdate(
       id, 
-      {
-        title: body.title,
-        coupleName: body.coupleName,
-        date: body.eventDate, 
-        description: body.description,
-        password: body.password !== undefined ? body.password : "", 
-        isActive: body.isActive !== undefined ? body.isActive : true,
-        coverImage: body.coverImage
-      }, 
+      updateData, 
       { new: true }
     );
     
@@ -53,7 +64,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// YENİ EKLENEN KISIM: Galeriyi tamamen silme işlemi
+// Galeriyi tamamen silme işlemi
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
