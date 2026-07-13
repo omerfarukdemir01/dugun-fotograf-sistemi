@@ -13,12 +13,24 @@ export default function HomePage() {
           <div className="text-2xl font-serif tracking-widest text-stone-900">
             STUDIO <span className="italic text-stone-500">Ömer</span>
           </div>
-          <nav className="hidden md:flex gap-10 text-xs tracking-[0.2em] uppercase text-stone-600 font-medium">
-            <a href="#hikayemiz" className="hover:text-rose-400 transition-colors duration-300">Hikayemiz</a>
-            <a href="#hizmetler" className="hover:text-rose-400 transition-colors duration-300">Hizmetler</a>
-            <a href="#portfolyo" className="hover:text-rose-400 transition-colors duration-300">Portfolyo</a>
-            <a href="#iletisim" className="hover:text-rose-400 transition-colors duration-300">İletişim</a>
-          </nav>
+          
+          {/* MENÜ LİNKLERİ VE GİRİŞ BUTONU */}
+          <div className="hidden md:flex items-center gap-10">
+            <nav className="flex gap-10 text-xs tracking-[0.2em] uppercase text-stone-600 font-medium items-center">
+              <a href="#hikayemiz" className="hover:text-rose-400 transition-colors duration-300">Hikayemiz</a>
+              <a href="#hizmetler" className="hover:text-rose-400 transition-colors duration-300">Hizmetler</a>
+              <a href="#portfolyo" className="hover:text-rose-400 transition-colors duration-300">Portfolyo</a>
+              <a href="#iletisim" className="hover:text-rose-400 transition-colors duration-300">İletişim</a>
+            </nav>
+            
+            {/* YENİ EKLENEN GİRİŞ BUTONU */}
+            <Link 
+              href="/login" 
+              className="px-6 py-2.5 bg-stone-900 text-stone-100 text-xs tracking-[0.2em] uppercase hover:bg-rose-400 hover:text-white transition-all duration-300 rounded-sm"
+            >
+              Müşteri Girişi
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -102,7 +114,6 @@ export default function HomePage() {
         <section id="iletisim" className="py-32 px-6 max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-serif mb-12 text-stone-900">Kahvenizi İçerken<br/><span className="italic text-stone-500">Detayları Konuşalım.</span></h2>
           <div className="grid md:grid-cols-3 gap-12 border-t border-stone-200 pt-16">
-             {/* İletişim detayları aynı kalabilir */}
              <div className="flex flex-col items-center"><span className="text-xl mb-4">📍</span><p className="text-sm font-light">Zarafet Sokak, Kahramanmaraş</p></div>
              <div className="flex flex-col items-center"><span className="text-xl mb-4">📞</span><p className="text-sm font-light">+90 555 123 45 67</p></div>
              <div className="flex flex-col items-center"><span className="text-xl mb-4">✉️</span><p className="text-sm font-light">hello@studioomer.com</p></div>
