@@ -1,22 +1,25 @@
-import { NextResponse } from "next/server";
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const { username, password } = await request.json();
+    const body = await req.json();
 
-    // .env.local dosyasındaki gerçek bilgilerle tarayıcıdan gelenleri karşılaştırıyoruz
-    if (
-      username === process.env.ADMIN_USERNAME &&
-      password === process.env.ADMIN_PASSWORD
-    ) {
-      // Giriş başarılıysa tarayıcıya onay dönüyoruz
+    if (body.username === 'admin' && body.password === 'omer1234') { 
+      
+      const cookieStore = await cookies();
+      cookieStore.set('admin_token', 'studio_secret_key_2026', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7, // 1 hafta
+        path: '/',
+      });
+
       return NextResponse.json({ success: true });
     }
 
-    // Bilgiler yanlışsa hata dönüyoruz
-    return NextResponse.json({ error: "Kullanıcı adı veya şifre hatalı!" }, { status: 401 });
-
+    return NextResponse.json({ success: false, error: 'Hatalı kullanıcı adı veya şifre' }, { status: 401 });
   } catch (error) {
-    return NextResponse.json({ error: "Sistemsel bir hata oluştu." }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Sunucu hatası' }, { status: 500 });
   }
 }

@@ -11,20 +11,13 @@ interface IGallery {
   photoCount: number;
   description?: string;
   coverImage?: string; 
-  isSelectionCompleted?: boolean; // YENİ: Sipariş kilitli mi?
-  isNotificationRead?: boolean;   // YENİ: Admin bildirimi okudu mu?
+  isSelectionCompleted?: boolean;
+  isNotificationRead?: boolean;
 }
 
 export default function AdminPage() {
   const router = useRouter(); 
   
-  useEffect(() => {
-    const auth = localStorage.getItem("isAdminAuthenticated");
-    if (auth !== "true") {
-      router.push("/login");
-    }
-  }, [router]);
-
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -76,7 +69,6 @@ export default function AdminPage() {
     }
   };
 
-  // YENİ: Okunmamış ve seçimi tamamlanmış galerileri filtrele
   const unreadNotifications = galleries.filter(g => g.isSelectionCompleted && !g.isNotificationRead);
 
   return (
@@ -90,10 +82,12 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-zinc-600">Hoş geldin, Admin</span>
             
+            {/* GÜNCELLENDİ: Gerçek Çıkış Yap (Logout) İşlemi */}
             <button 
-              onClick={() => {
-                localStorage.removeItem("isAdminAuthenticated");
-                router.push("/login");
+              onClick={async () => {
+                await fetch('/api/logout');
+                router.push('/login');
+                router.refresh();
               }}
               className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
             >
@@ -116,7 +110,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* YENİ: BİLDİRİMLER PANOSU */}
         {unreadNotifications.length > 0 && (
           <div className="mb-10 bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm animate-fade-in-up">
             <div className="flex items-center gap-3 mb-4">
@@ -149,7 +142,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* MEVCUT GALERİLER LİSTESİ */}
         {loading ? (
           <div className="text-center py-12 text-zinc-500 text-sm">Galeriler yükleniyor...</div>
         ) : galleries.length === 0 ? (
@@ -161,7 +153,6 @@ export default function AdminPage() {
             {galleries.map((gallery) => (
               <div key={gallery._id} className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 transition-all hover:shadow-md relative">
                 
-                {/* YENİ: Tamamlandı Rozeti */}
                 {gallery.isSelectionCompleted && (
                   <div className="absolute top-3 right-3 z-10 bg-green-500 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 rounded-full shadow-md">
                     Seçim Tamamlandı
