@@ -44,6 +44,9 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   });
 
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+  
+  // YENİ: ÇOKLU SEÇİM STATELERİ
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
 
   const [applyWatermark, setApplyWatermark] = useState(true);
   const [watermarkText, setWatermarkText] = useState("Ömer Faruk Photography");
@@ -52,7 +55,10 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     try {
       const response = await fetch(`/api/photos?galleryId=${galleryId}&t=${Date.now()}`, { cache: "no-store" });
       const resData = await response.json();
-      if (resData.success) setPhotos(resData.data);
+      if (resData.success) {
+        setPhotos(resData.data);
+        setSelectedPhotoIds([]); // Liste yenilenince seçimleri temizle
+      }
     } catch (error) {
       console.error("Fotoğraflar hata:", error);
     } finally {
@@ -116,7 +122,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     alert(`${favoritePhotos.length} adet fotoğrafın ismi panoya kopyalandı!\n\nLightroom veya bilgisayarınızdaki klasör arama kutusuna yapıştırarak fotoğrafları saniyeler içinde bulabilirsiniz.`);
   };
 
-  // YENİ: MÜŞTERİ SEÇİMİNİ İPTAL EDİP KİLİDİ AÇMA FONKSİYONU
   const handleUnlockSelection = async () => {
     if (!window.confirm("DİKKAT: Galeriyi yeniden seçime açmak istediğinize emin misiniz?\n\nMüşteri tekrar seçim ekleyip çıkarabilecektir.")) return;
     
@@ -237,6 +242,22 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // YENİ: TOPLU SİLME FONKSİYONU
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`${selectedPhotoIds.length} adet fotoğrafı kalıcı olarak silmek istediğinize emin misiniz?`)) return;
+    
+    try {
+      // Paralel silme işlemi başlat (hız için Promise.all kullanıyoruz)
+      await Promise.all(
+        selectedPhotoIds.map(id => fetch(`/api/photos?id=${id}`, { method: "DELETE" }))
+      );
+      alert(`${selectedPhotoIds.length} fotoğraf başarıyla silindi.`);
+      fetchPhotos();
+    } catch (error) {
+      alert("Toplu silme sırasında bir hata oluştu.");
+    }
+  };
+
   const handleSetCover = async (photoUrl: string) => {
     try {
       const response = await fetch(`/api/gallery-info?id=${galleryId}`, {
@@ -302,6 +323,15 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
 
   const favoriteCount = photos.filter(photo => photo.isFavorite).length;
   const displayedPhotos = showOnlyFavorites ? photos.filter(photo => photo.isFavorite) : photos;
+  
+  // YENİ: TÜMÜNÜ SEÇ/TEMİZLE
+  const handleSelectAll = () => {
+    if (selectedPhotoIds.length === displayedPhotos.length) {
+      setSelectedPhotoIds([]);
+    } else {
+      setSelectedPhotoIds(displayedPhotos.map(p => p._id));
+    }
+  };
 
   const selectedIndex = displayedPhotos.findIndex(p => p.url === selectedImage);
 
@@ -335,7 +365,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans p-4 sm:p-6">
+    <div className="min-h-screen bg-zinc-50 font-sans p-4 sm:p-6 pb-24">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <Link href="/admin" className="text-zinc-500 hover:text-black font-medium">← Geri Dön</Link>
@@ -350,7 +380,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">{gallery?.title}</h1>
             
-            {/* GÜNCELLENDİ: "Kilidi Aç" Butonu eklendi */}
             {gallery?.isSelectionCompleted && (
               <div className="flex items-center gap-2">
                 <span className="bg-green-600 text-white text-xs px-2.5 py-1 rounded-full font-bold shadow-sm">
@@ -447,9 +476,19 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 border-b border-zinc-200 pb-4">
-          <h3 className="text-lg font-semibold text-zinc-900">
-            {showOnlyFavorites ? 'Favori Fotoğraflar' : 'Tüm Fotoğraflar'} ({displayedPhotos.length})
-          </h3>
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-semibold text-zinc-900">
+              {showOnlyFavorites ? 'Favori Fotoğraflar' : 'Tüm Fotoğraflar'} ({displayedPhotos.length})
+            </h3>
+            {displayedPhotos.length > 0 && (
+              <button 
+                onClick={handleSelectAll} 
+                className="text-xs font-medium text-zinc-500 hover:text-black transition-colors underline underline-offset-2"
+              >
+                {selectedPhotoIds.length === displayedPhotos.length ? 'Seçimi Temizle' : 'Tümünü Seç'}
+              </button>
+            )}
+          </div>
           
           <div className="flex gap-2">
             {favoriteCount > 0 && (
@@ -489,28 +528,64 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {displayedPhotos.map((photo) => (
-              <div key={photo._id} className={`group relative aspect-square rounded-xl overflow-hidden border-4 transition-all hover:shadow-md cursor-zoom-in ${gallery?.coverImage === photo.url ? 'border-blue-500' : 'border-transparent'}`} onClick={() => setSelectedImage(photo.url)}>
+              <div 
+                key={photo._id} 
+                className={`group relative aspect-square rounded-xl overflow-hidden border-4 transition-all cursor-zoom-in 
+                  ${selectedPhotoIds.includes(photo._id) ? 'ring-2 ring-black border-transparent scale-95 opacity-90' : gallery?.coverImage === photo.url ? 'border-blue-500 hover:shadow-md' : 'border-transparent hover:shadow-md'}`} 
+                onClick={() => setSelectedImage(photo.url)}
+              >
                 <Image src={photo.url} alt="Fotoğraf" fill className="object-cover transition-transform duration-500 group-hover:scale-105" sizes="(max-width: 768px) 50vw, 20vw" />
                 
-                {photo.isFavorite && (
-                  <div className="absolute top-2 left-2 bg-red-500 text-white p-1.5 rounded-full shadow-sm z-10">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.582-1.9C4.045 12.733 2 10.352 2 7.5a4.5 4.5 0 018-2.828A4.5 4.5 0 0118 7.5c0 2.852-2.044 5.233-3.885 6.82a22.049 22.049 0 01-3.744 2.582l-.019.01-.005.003h-.002a.739.739 0 01-.69.001l-.002-.001z" /></svg>
-                  </div>
-                )}
+                {/* SOL ÜST: Seçim Kutucuğu ve Favori İkonu */}
+                <div className="absolute top-2 left-2 z-20 flex flex-col gap-2 items-start">
+                  <input 
+                    type="checkbox"
+                    checked={selectedPhotoIds.includes(photo._id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setSelectedPhotoIds(prev => prev.includes(photo._id) ? prev.filter(id => id !== photo._id) : [...prev, photo._id]);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-5 h-5 rounded cursor-pointer text-black focus:ring-black border-zinc-300 shadow-sm"
+                  />
+                  {photo.isFavorite && (
+                    <div className="bg-red-500 text-white p-1.5 rounded-full shadow-sm">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M9.653 16.915l-.005-.003-.019-.01a20.759 20.759 0 01-1.162-.682 22.045 22.045 0 01-2.582-1.9C4.045 12.733 2 10.352 2 7.5a4.5 4.5 0 018-2.828A4.5 4.5 0 0118 7.5c0 2.852-2.044 5.233-3.885 6.82a22.049 22.049 0 01-3.744 2.582l-.019.01-.005.003h-.002a.739.739 0 01-.69.001l-.002-.001z" /></svg>
+                    </div>
+                  )}
+                </div>
                 
                 {gallery?.coverImage === photo.url && (
-                  <div className="absolute bottom-0 inset-x-0 bg-blue-500/90 text-white text-[10px] font-bold text-center py-1 z-10 uppercase tracking-widest">Kapak</div>
+                  <div className="absolute bottom-0 inset-x-0 bg-blue-500/90 text-white text-[10px] font-bold text-center py-1 z-10 uppercase tracking-widest pointer-events-none">Kapak</div>
                 )}
                 
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                  <button onClick={(e) => { e.stopPropagation(); handleSetCover(photo.url); }} className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-600 shadow-sm transition-colors">Kapak</button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo._id); }} className="bg-red-500 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-600 shadow-sm transition-colors">Sil</button>
+                {/* SAĞ ÜST: Mobilde her zaman görünür, masaüstünde hover ile görünür ikonlar */}
+                <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 z-10 flex gap-1">
+                  <button onClick={(e) => { e.stopPropagation(); handleSetCover(photo.url); }} className="bg-blue-500/90 backdrop-blur-sm text-white px-2 py-1.5 rounded text-[10px] sm:text-xs font-semibold hover:bg-blue-600 shadow-sm transition-colors">Kapak</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo._id); }} className="bg-red-500/90 backdrop-blur-sm text-white px-2 py-1.5 rounded text-[10px] sm:text-xs font-semibold hover:bg-red-600 shadow-sm transition-colors">Sil</button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* YENİ: SEÇİLENLER İÇİN TOPLU İŞLEM MENÜSÜ */}
+      {selectedPhotoIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl z-40 flex items-center gap-6 w-[90%] sm:w-auto justify-between border border-zinc-800 transition-all duration-300">
+          <span className="font-medium text-sm sm:text-base whitespace-nowrap">
+            {selectedPhotoIds.length} fotoğraf seçildi
+          </span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSelectedPhotoIds([])} className="px-3 py-1.5 text-xs sm:text-sm text-zinc-300 hover:text-white transition-colors">
+              İptal
+            </button>
+            <button onClick={handleBulkDelete} className="px-4 py-2 text-xs sm:text-sm bg-red-600 hover:bg-red-500 rounded-lg font-bold transition-colors shadow-lg">
+              Seçilenleri Sil
+            </button>
+          </div>
+        </div>
+      )}
 
       {isEditing && (
         <div className="fixed inset-0 bg-zinc-900/40 flex items-center justify-center p-4 z-50 backdrop-blur-sm overflow-y-auto py-12">
