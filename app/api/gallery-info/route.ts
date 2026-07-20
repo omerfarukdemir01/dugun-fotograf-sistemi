@@ -17,7 +17,6 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
     
-    // Şifreyi GİZLEMİYORUZ (Admin görsün diye)
     const gallery = await Gallery.findById(id).lean();
     if (!gallery) return NextResponse.json({ error: "Galeri bulunamadı" }, { status: 404 });
 
@@ -34,24 +33,23 @@ export async function GET(request: Request) {
           const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "omer_studio_secret");
           const { payload } = await jwtVerify(token, secret);
           
-          // YENİ KONTROL: Biletteki şifre ile güncel şifre aynı mı?
           if (payload.password === gallery.password) {
-            isAuthorized = true; // Şifreler aynı, bilet geçerli!
+            isAuthorized = true;
           } else {
-            isAuthorized = false; // Şifre değişmiş, bilet yandı! Kapıya yönlendir.
+            isAuthorized = false;
           }
         } catch (err) {
+          console.error("JWT doğrulama hatası:", err); // 'err' uyarısını çözen satır
           isAuthorized = false; 
         }
       }
     }
 
-    // ARTIK "protected" DİYE MASKELEMİYORUZ. Şifre neyse o gidecek.
-    
     gallery.photoCount = await Photo.countDocuments({ galleryId: id });
 
     return NextResponse.json({ success: true, data: gallery, isAuthorized });
-  } catch {
+  } catch (error) {
+    console.error("Gallery Info GET hatası:", error); // Uyarıyı çözen satır
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
@@ -79,7 +77,6 @@ export async function PUT(request: Request) {
 
     if (body.eventDate) updateData.eventDate = new Date(body.eventDate);
 
-    // BCRYPT YOK. Şifre formdan nasıl geldiyse direkt kaydediyoruz.
     if (body.password !== undefined) {
        updateData.password = body.password;
     }
@@ -90,6 +87,7 @@ export async function PUT(request: Request) {
     const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { new: true }).lean();
     return NextResponse.json({ success: true, data: updatedGallery });
   } catch (error) {
+    console.error("Gallery Info PUT hatası:", error); // Uyarıyı çözen satır
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
@@ -103,7 +101,8 @@ export async function DELETE(request: Request) {
     await Photo.deleteMany({ galleryId: id });
     await Gallery.findByIdAndDelete(id);
     return NextResponse.json({ success: true, message: "Galeri başarıyla silindi." });
-  } catch {
+  } catch (error) {
+    console.error("Gallery Info DELETE hatası:", error);
     return NextResponse.json({ error: "Silme işlemi başarısız oldu." }, { status: 500 });
   }
 }

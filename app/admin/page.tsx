@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image"; // Next.js Image bileşeni eklendi
 
 interface IGallery {
   _id: string;
@@ -83,16 +84,15 @@ export default function AdminPage() {
             <span className="text-sm font-medium text-zinc-600">Hoş geldin, Admin</span>
             
             <button 
-  onClick={async () => {
-    // Buraya { method: 'POST' } eklendi
-    await fetch('/api/logout', { method: 'POST' }); 
-    router.push('/login');
-    router.refresh();
-  }}
-  className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
->
-  Çıkış Yap
-</button>
+              onClick={async () => {
+                await fetch('/api/logout', { method: 'POST' }); 
+                router.push('/login');
+                router.refresh();
+              }}
+              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
+            >
+              Çıkış Yap
+            </button>
             
           </div>
         </div>
@@ -161,10 +161,13 @@ export default function AdminPage() {
 
                 <div className="relative aspect-[4/3] w-full bg-zinc-100 flex items-center justify-center text-zinc-400 overflow-hidden">
                   {gallery.coverImage ? (
-                    <img 
+                    /* Düz <img> etiketleri yerine responsive ve LCP optimize Image bileşeni yerleştirildi */
+                    <Image 
                       src={gallery.coverImage} 
-                      alt={gallery.title} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      alt={`${gallery.title} Galeri Kapak Görseli`} 
+                      fill
+                      sizes="(max-w-640px) 100vw, (max-w-1024px) 50vw, 33vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   ) : (
                     <span className="text-sm">Kapak Fotoğrafı Yok</span>

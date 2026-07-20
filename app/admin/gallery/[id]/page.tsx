@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image"; // Next.js Image bileşeni eklendi
 
 interface IPhoto {
   _id: string;
@@ -616,7 +617,13 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
                   ${selectedPhotoIds.includes(photo._id) ? 'ring-2 ring-black border-transparent scale-95 opacity-90' : gallery?.coverImage === photo.url ? 'border-blue-500 hover:shadow-md' : 'border-transparent hover:shadow-md'}`} 
                 onClick={() => setSelectedImage(photo.url)}
               >
-                <img src={photo.url} alt="Fotoğraf" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                <Image 
+                  src={photo.url} 
+                  alt="Fotoğraf" 
+                  fill 
+                  sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw" 
+                  className="object-cover transition-transform duration-500 group-hover:scale-105" 
+                />
                 
                 <div className="absolute top-2 left-2 z-20 flex flex-col gap-2 items-start">
                   <input 
@@ -717,7 +724,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
-          <div className="relative max-w-6xl max-h-[90vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-[95vw] sm:w-[90vw] max-w-6xl h-[80vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
             {displayedPhotos[selectedIndex]?.isFavorite && (
               <div className="absolute top-4 left-4 sm:left-0 bg-red-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 z-10 pointer-events-none">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -727,7 +734,13 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
               </div>
             )}
             
-            <img src={selectedImage} alt="Büyük Görsel" className="max-w-full max-h-[85vh] object-contain select-none shadow-2xl px-4 sm:px-0" />
+            <Image 
+              src={selectedImage} 
+              alt="Büyük Görsel" 
+              fill 
+              sizes="100vw"
+              className="object-contain select-none shadow-2xl px-4 sm:px-0" 
+            />
           </div>
 
           {selectedIndex < displayedPhotos.length - 1 && (

@@ -20,17 +20,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Galeri bulunamadı." }, { status: 404 });
     }
 
-    // BCRYPT İPTAL EDİLDİ. Düz metin olarak müşterinin girdiği ile veritabanındaki eşleşiyor mu diye bakıyoruz.
     if (gallery.password !== password) {
       return NextResponse.json({ error: "Hatalı şifre, lütfen tekrar deneyin." }, { status: 401 });
     }
 
-    // Şifre Doğruysa -> 3 Saatlik Güvenli Cookie (Oturum) Oluştur
     const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "omer_studio_secret");
     const token = await new SignJWT({ galleryId, password: gallery.password })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
-      .setExpirationTime("3h") // "7d" (7 gün) yerine "3h" (3 saat) yaptık
+      .setExpirationTime("3h")
       .sign(secret);
 
     const cookieStore = await cookies();
@@ -39,11 +37,12 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 3, // 60 saniye * 60 dakika * 3 saat (Matematiği 3 saate çektik)
+      maxAge: 60 * 60 * 3, 
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("Gallery Auth hatası:", error); // Uyarıyı çözen satır
     return NextResponse.json({ error: "Sunucu hatası." }, { status: 500 });
   }
 }

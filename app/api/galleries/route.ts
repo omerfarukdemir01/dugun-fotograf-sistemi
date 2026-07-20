@@ -27,11 +27,12 @@ export async function POST(request: Request) {
     const newGallery = await Gallery.create({
       title,
       eventDate: date,
-      password: password || "", // Bcrypt sildik, şifreyi düz kaydediyoruz
+      password: password || "",
     });
 
     return NextResponse.json({ success: true, data: newGallery }, { status: 201 });
   } catch (error) {
+    console.error("Gallery POST hatası:", error); // Uyarıyı çözen satır
     return NextResponse.json({ error: "Veritabanına kaydedilirken bir hata oluştu." }, { status: 500 });
   }
 }
@@ -41,7 +42,6 @@ export async function GET() {
     await requireAdmin();
     await connectToDatabase();
 
-    // select("-password") SİLİNDİ! Artık admin panelinde şifreler görünecek.
     const galleries = await Gallery.find({}).sort({ createdAt: -1 }).lean();
 
     const galleriesWithRealCounts = await Promise.all(
@@ -53,6 +53,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: galleriesWithRealCounts }, { status: 200 });
   } catch (error) {
+    console.error("Gallery GET hatası:", error); // Uyarıyı çözen satır
     return NextResponse.json({ error: "Galeriler yüklenirken bir hata oluştu." }, { status: 500 });
   }
 }

@@ -24,8 +24,8 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
   const [photos, setPhotos] = useState<IPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Pagination State'leri
-  const [page, setPage] = useState(1);
+  // Pagination State'leri ('page' değişkeni kullanılmadığı için sadece setPage alınıyor)
+  const [, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -308,7 +308,14 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
 
       {gallery?.coverImage ? (
         <div className="relative w-full h-[60vh] md:h-[75vh] flex items-end justify-center pb-20">
-          <img src={gallery.coverImage} alt="Kapak Fotoğrafı" className="absolute inset-0 w-full h-full object-cover" />
+          <Image 
+            src={gallery.coverImage} 
+            alt="Kapak Fotoğrafı" 
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover" 
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-[#FAFAFA] via-[#FAFAFA]/20 to-transparent"></div>
           
           <div className="relative z-10 text-center px-4 animate-fade-in-up">
@@ -430,8 +437,14 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
             </button>
           )}
 
-          <div className="relative max-w-6xl max-h-[90vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
-            <img src={selectedPhoto.url} alt="Büyük Görünüm" className="max-w-full max-h-[80vh] object-contain select-none shadow-2xl px-4 sm:px-0" />
+          <div className="relative w-[95vw] sm:w-[90vw] max-w-6xl h-[80vh] flex flex-col items-center justify-center cursor-default" onClick={(e) => e.stopPropagation()}>
+            <Image 
+              src={selectedPhoto.url} 
+              alt="Büyük Görünüm" 
+              fill
+              sizes="100vw"
+              className="object-contain select-none shadow-2xl px-4 sm:px-0" 
+            />
             
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-2">
               {isLocked ? (

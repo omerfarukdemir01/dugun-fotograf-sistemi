@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link"; // Ana sayfaya dönüş için eklendi
+import Link from "next/link";
+import Image from "next/image"; // Next.js Image bileşeni eklendi
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -17,16 +18,13 @@ export default function LoginPage() {
     setError(false);
 
     try {
-      // İstek /api/login rotasına gidiyor
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // API'ye hem kullanıcı adını hem şifreyi gönderiyoruz
         body: JSON.stringify({ username, password })
       });
 
       if (res.ok) {
-        // Çerez sunucu tarafından yerleştirildi, admin paneline geç
         router.push("/admin");
         router.refresh(); 
       } else {
@@ -44,10 +42,14 @@ export default function LoginPage() {
       
       {/* SOL TARAF - GÖRSEL (Sadece tablet ve masaüstünde görünür) */}
       <div className="hidden lg:block lg:w-1/2 relative bg-stone-900 overflow-hidden">
-        <img 
+        {/* Düz img kaldırıldı, yerine performans ve LCP dostu Next.js Image yerleştirildi */}
+        <Image 
           src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=80&w=800&auto=format&fit=crop" 
-          alt="Studio Login" 
-          className="absolute inset-0 w-full h-full object-cover opacity-80 hover:scale-105 transition-transform duration-[10s]"
+          alt="Studio Yönetim Paneli Giriş Arka Plan Görseli" 
+          fill
+          priority // İlk yüklemede göründüğü için hızlı açılması adına priority eklendi
+          sizes="50vw"
+          className="object-cover opacity-80 hover:scale-105 transition-transform duration-[10s]"
         />
         {/* Karartma efekti (Gradient) */}
         <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/20 to-transparent"></div>
