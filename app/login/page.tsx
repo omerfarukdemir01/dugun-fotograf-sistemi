@@ -32,7 +32,7 @@ export default function LoginPage() {
       } else {
         setError(true);
       }
-    } catch (error) {
+    } catch  {
       setError(true);
     } finally {
       setLoading(false);

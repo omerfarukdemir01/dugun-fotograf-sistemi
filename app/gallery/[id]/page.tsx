@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         },
       };
     }
-  } catch (error) {
+  } catch  {
     // Burada hata yakalarsak sessiz kal, meta verisiz devam et
     return { title: "Studio Ömer" };
   }

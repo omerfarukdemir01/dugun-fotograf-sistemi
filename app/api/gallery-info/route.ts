@@ -1,86 +1,109 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Gallery from "@/models/Gallery";
-import Photo from "@/models/Photo"; // Galeriyi silerken içindeki fotoğrafları da silmek için ekledik
+import Photo from "@/models/Photo";
+import { requireAdmin } from "@/lib/admin";
+import mongoose from "mongoose";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "ID eksik" }, { status: 400 });
-    
-    await connectToDatabase();
-    const gallery = await Gallery.findById(id);
-    if (!gallery) return NextResponse.json({ error: "Galeri bulunamadı" }, { status: 404 });
-    
-    const galleryObj = gallery.toObject();
-    galleryObj.eventDate = galleryObj.date;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Geçersiz ID" }, { status: 400 });
+    }
 
-    return NextResponse.json({ success: true, data: galleryObj });
-  } catch (error) {
+    await connectToDatabase();
+    
+    // Şifreyi GİZLEMİYORUZ (Admin görsün diye)
+    const gallery = await Gallery.findById(id).lean();
+    if (!gallery) return NextResponse.json({ error: "Galeri bulunamadı" }, { status: 404 });
+
+    let isAuthorized = false;
+
+    if (!gallery.password) {
+      isAuthorized = true; 
+    } else {
+      const cookieStore = await cookies();
+      const token = cookieStore.get(`gallery_auth_${id}`)?.value;
+
+      if (token) {
+        try {
+          const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "omer_studio_secret");
+          const { payload } = await jwtVerify(token, secret);
+          
+          // YENİ KONTROL: Biletteki şifre ile güncel şifre aynı mı?
+          if (payload.password === gallery.password) {
+            isAuthorized = true; // Şifreler aynı, bilet geçerli!
+          } else {
+            isAuthorized = false; // Şifre değişmiş, bilet yandı! Kapıya yönlendir.
+          }
+        } catch (err) {
+          isAuthorized = false; 
+        }
+      }
+    }
+
+    // ARTIK "protected" DİYE MASKELEMİYORUZ. Şifre neyse o gidecek.
+    
+    gallery.photoCount = await Photo.countDocuments({ galleryId: id });
+
+    return NextResponse.json({ success: true, data: gallery, isAuthorized });
+  } catch {
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const body = await request.json();
 
-    if (!id) return NextResponse.json({ error: "ID eksik" }, { status: 400 });
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Geçersiz ID" }, { status: 400 });
+    }
 
     await connectToDatabase();
     
-    // Güncellenecek standart veriler
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       title: body.title,
       coupleName: body.coupleName,
-      date: body.eventDate, 
       description: body.description,
-      password: body.password !== undefined ? body.password : "", 
       isActive: body.isActive !== undefined ? body.isActive : true,
       coverImage: body.coverImage
     };
 
-    // YENİ EKLENEN KISIM: Sipariş Kilidi ve Bildirim Verileri
-    // Eğer frontend'den (müşteri veya admin sayfasından) bu veriler geldiyse veritabanına yaz
-    if (body.isSelectionCompleted !== undefined) {
-      updateData.isSelectionCompleted = body.isSelectionCompleted;
-    }
-    if (body.isNotificationRead !== undefined) {
-      updateData.isNotificationRead = body.isNotificationRead;
+    if (body.eventDate) updateData.eventDate = new Date(body.eventDate);
+
+    // BCRYPT YOK. Şifre formdan nasıl geldiyse direkt kaydediyoruz.
+    if (body.password !== undefined) {
+       updateData.password = body.password;
     }
 
-    const updatedGallery = await Gallery.findByIdAndUpdate(
-      id, 
-      updateData, 
-      { new: true }
-    );
-    
+    if (body.isSelectionCompleted !== undefined) updateData.isSelectionCompleted = body.isSelectionCompleted;
+    if (body.isNotificationRead !== undefined) updateData.isNotificationRead = body.isNotificationRead;
+
+    const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { new: true }).lean();
     return NextResponse.json({ success: true, data: updatedGallery });
   } catch (error) {
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
 
-// Galeriyi tamamen silme işlemi
 export async function DELETE(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "ID eksik" }, { status: 400 });
-
     await connectToDatabase();
-    
-    // 1. Önce bu galeriye ait tüm fotoğrafları veritabanından sil
     await Photo.deleteMany({ galleryId: id });
-    
-    // 2. Sonra galerinin kendisini sil
     await Gallery.findByIdAndDelete(id);
-
     return NextResponse.json({ success: true, message: "Galeri başarıyla silindi." });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Silme işlemi başarısız oldu." }, { status: 500 });
   }
 }

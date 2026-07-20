@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface IGallery {
@@ -25,7 +25,7 @@ export default function AdminPage() {
   const [galleries, setGalleries] = useState<IGallery[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchGalleries = async () => {
+  const fetchGalleries = useCallback(async () => {
     try {
       const response = await fetch(`/api/galleries?t=${Date.now()}`, {
         cache: "no-store"
@@ -39,11 +39,11 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchGalleries();
-  }, []);
+  }, [fetchGalleries]);
 
   const handleCreateGallery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,17 +82,17 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-zinc-600">Hoş geldin, Admin</span>
             
-            {/* GÜNCELLENDİ: Gerçek Çıkış Yap (Logout) İşlemi */}
             <button 
-              onClick={async () => {
-                await fetch('/api/logout');
-                router.push('/login');
-                router.refresh();
-              }}
-              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
-            >
-              Çıkış Yap
-            </button>
+  onClick={async () => {
+    // Buraya { method: 'POST' } eklendi
+    await fetch('/api/logout', { method: 'POST' }); 
+    router.push('/login');
+    router.refresh();
+  }}
+  className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
+>
+  Çıkış Yap
+</button>
             
           </div>
         </div>

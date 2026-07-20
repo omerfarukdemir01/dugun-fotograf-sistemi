@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 interface IPhoto {
   _id: string;
@@ -18,11 +19,16 @@ interface IGallery {
   isSelectionCompleted?: boolean;
 }
 
-// DİKKAT: Artık params yerine direkt galleryId prop'u alıyoruz
 export default function CustomerGalleryClient({ galleryId }: { galleryId: string }) {
   const [gallery, setGallery] = useState<IGallery | null>(null);
   const [photos, setPhotos] = useState<IPhoto[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Pagination State'leri
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
   
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [inputPassword, setInputPassword] = useState("");
@@ -33,6 +39,14 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
 
   const isLocked = gallery?.isSelectionCompleted;
 
+  // Orijinal URL'yi optimize edilmiş thumbnail URL'sine çeviren fonksiyon
+  const getThumbnailUrl = (url: string) => {
+    if (url.includes('/upload/')) {
+      return url.replace('/upload/', '/upload/c_fill,w_400,q_auto,f_auto/');
+    }
+    return url;
+  };
+
   useEffect(() => {
     const fetchGalleryInfo = async () => {
       try {
@@ -40,7 +54,8 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
         const resData = await response.json();
         if (resData.success) {
           setGallery(resData.data);
-          if (!resData.data.password) setIsAuthorized(true);
+          // Backend'den gelen isAuthorized bilgisini doğrudan kullanıyoruz
+          if (resData.isAuthorized) setIsAuthorized(true);
         }
       } catch (error) {
         console.error("Galeri bilgileri yüklenemedi:", error);
@@ -51,29 +66,89 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
     fetchGalleryInfo();
   }, [galleryId]);
 
+  // Sayfalama (Pagination) destekli fetchPhotos fonksiyonu
+  const fetchPhotos = useCallback(async (pageNum: number, isInitial = false) => {
+    if (!isAuthorized) return;
+    
+    if (pageNum > 1) setLoadingMore(true);
+    
+    try {
+      const response = await fetch(`/api/photos?galleryId=${galleryId}&page=${pageNum}&limit=30&t=${Date.now()}`, { cache: "no-store" });
+      const resData = await response.json();
+      
+      if (resData.success) {
+        if (isInitial) {
+          setPhotos(resData.data);
+        } else {
+          setPhotos(prev => {
+            // Mükerrer kayıtları önlemek için id kontrolü yapıyoruz
+            const existingIds = new Set(prev.map(p => p._id));
+            const newPhotos = resData.data.filter((p: IPhoto) => !existingIds.has(p._id));
+            return [...prev, ...newPhotos];
+          });
+        }
+        
+        // Gelen veri limiti (30) doldurmuyorsa daha fazla veri kalmamıştır
+        setHasMore(resData.data.length === 30);
+      }
+    } catch (error) {
+      console.error("Fotoğraflar yüklenirken hata:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [galleryId, isAuthorized]);
+
+  // İlk yetki onaylandığında sadece 1. sayfayı çek
   useEffect(() => {
     if (isAuthorized) {
-      const fetchPhotos = async () => {
-        try {
-          const response = await fetch(`/api/photos?galleryId=${galleryId}&t=${Date.now()}`, { cache: "no-store" });
-          const resData = await response.json();
-          if (resData.success) setPhotos(resData.data);
-        } catch (error) {
-          console.error("Fotoğraflar yüklenirken hata:", error);
-        }
-      };
-      fetchPhotos();
+      setPage(1);
+      fetchPhotos(1, true);
     }
-  }, [isAuthorized, galleryId]);
+  }, [isAuthorized, fetchPhotos]);
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  // Infinite Scroll Gözlemcisi
+  const lastElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (loadingMore) return;
+    
+    if (observerRef.current) observerRef.current.disconnect();
+    
+    observerRef.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore && !showOnlyFavorites) {
+        setPage(prevPage => {
+          const nextPage = prevPage + 1;
+          fetchPhotos(nextPage);
+          return nextPage;
+        });
+      }
+    });
+    
+    if (node) observerRef.current.observe(node);
+  }, [loadingMore, hasMore, fetchPhotos, showOnlyFavorites]);
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (gallery?.password && inputPassword === gallery.password) {
-      setIsAuthorized(true);
-      setPasswordError(false);
-    } else {
+    setPasswordError(false);
+
+    try {
+      // Şifreyi sunucudaki gallery-auth endpoint'ine gönderip doğruluyoruz
+      const response = await fetch("/api/gallery-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ galleryId, password: inputPassword })
+      });
+
+      const resData = await response.json();
+
+      if (response.ok && resData.success) {
+        setIsAuthorized(true);
+        setPasswordError(false);
+      } else {
+        setPasswordError(true);
+        setInputPassword("");
+      }
+    } catch (error) {
+      console.error("Şifre doğrulanırken hata oluştu:", error);
       setPasswordError(true);
-      setInputPassword("");
     }
   };
 
@@ -98,7 +173,7 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
       if (!resData.success) {
         setPhotos(photos.map(photo => photo._id === photoId ? { ...photo, isFavorite: currentStatus } : photo));
       }
-    } catch (error) {
+    } catch {
       setPhotos(photos.map(photo => photo._id === photoId ? { ...photo, isFavorite: currentStatus } : photo));
     }
   };
@@ -129,7 +204,7 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
       } else {
         alert("İşlem sırasında bir hata oluştu.");
       }
-    } catch (error) {
+    } catch {
       alert("Sunucuya bağlanılamadı.");
     }
   };
@@ -157,7 +232,7 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
 
   useEffect(() => {
     if (showOnlyFavorites && favoriteCount === 0) {
-      setShowOnlyFavorites(false);
+      setTimeout(() => setShowOnlyFavorites(false), 0);
     }
   }, [favoriteCount, showOnlyFavorites]);
 
@@ -223,7 +298,7 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
       <header className={`absolute top-0 w-full z-40 p-8 ${gallery?.coverImage ? 'bg-gradient-to-b from-stone-900/60 to-transparent' : 'bg-transparent'}`}>
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link href="/" className={`text-xs tracking-[0.2em] uppercase font-medium transition-colors ${gallery?.coverImage ? 'text-stone-300 hover:text-white' : 'text-stone-500 hover:text-stone-900'}`}>
-            ← Vitrine Dön
+            &larr; Vitrine Dön
           </Link>
           <div className={`text-xl font-serif tracking-widest ${gallery?.coverImage ? 'text-white drop-shadow-md' : 'text-stone-900'}`}>
             STUDIO <span className={`italic ${gallery?.coverImage ? 'text-stone-300' : 'text-stone-500'}`}>Ömer</span>
@@ -238,7 +313,7 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
           
           <div className="relative z-10 text-center px-4 animate-fade-in-up">
             <h1 className="text-5xl md:text-7xl font-serif text-stone-900 mb-6 drop-shadow-sm">{gallery.title}</h1>
-            {gallery.description && <p className="text-stone-600 max-w-2xl mx-auto text-lg font-light italic">"{gallery.description}"</p>}
+            {gallery.description && <p className="text-stone-600 max-w-2xl mx-auto text-lg font-light italic">&quot;{gallery.description}&quot;</p>}
           </div>
         </div>
       ) : (
@@ -290,37 +365,58 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
             <p className="text-sm">Sanatsal dokunuşlar tamamlandığında fotoğraflarınız burada yerini alacak.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
-            {displayedPhotos.map((photo) => (
-              <div 
-                key={photo._id} 
-                onClick={() => setSelectedPhotoId(photo._id)} 
-                className="group relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-white shadow-sm transition-all duration-500 hover:-translate-y-1 hover:shadow-xl cursor-zoom-in border border-stone-100"
-              >
-                <img 
-                  src={photo.url} 
-                  alt="Galeri Karesi" 
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
-                />
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
+              {displayedPhotos.map((photo, index) => {
+                // Sona gelindiğini tespit etmek için observer referansını son elemana ekliyoruz
+                const isLastElement = index === displayedPhotos.length - 1;
                 
-                {isLocked ? (
-                  photo.isFavorite && (
-                     <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10">
-                       <div className="flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full bg-rose-400/90 text-white shadow-sm cursor-default">
-                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
-                       </div>
-                     </div>
-                  )
-                ) : (
-                  <div className={`absolute top-3 right-3 md:top-4 md:right-4 z-10 transition-opacity duration-500 ${photo.isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                    <button onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
-                    </button>
+                return (
+                  <div 
+                    key={photo._id} 
+                    ref={isLastElement ? lastElementRef : null}
+                    onClick={() => setSelectedPhotoId(photo._id)} 
+                    className="group relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-white shadow-sm transition-all duration-500 hover:-translate-y-1 hover:shadow-xl cursor-zoom-in border border-stone-100"
+                  >
+                    <Image 
+                      src={getThumbnailUrl(photo.url)} 
+                      alt="Galeri Karesi" 
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 20vw, 33vw"
+                      className="object-cover transition-transform duration-700 group-hover:scale-105" 
+                      loading="lazy"
+                    />
+                    
+                    {isLocked ? (
+                      photo.isFavorite && (
+                         <div className="absolute top-3 right-3 md:top-4 md:right-4 z-10">
+                           <div className="flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full bg-rose-400/90 text-white shadow-sm cursor-default">
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                           </div>
+                         </div>
+                      )
+                    ) : (
+                      <div className={`absolute top-3 right-3 md:top-4 md:right-4 z-10 transition-opacity duration-500 ${photo.isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                        <button onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
+                );
+              })}
+            </div>
+            
+            {/* Sonsuz Kaydırma Yükleniyor Göstergesi */}
+            {loadingMore && !showOnlyFavorites && (
+              <div className="w-full flex justify-center mt-12 mb-8">
+                <div className="flex items-center gap-3 text-stone-400 font-serif">
+                  <svg className="animate-spin h-5 w-5 text-stone-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  <span>Daha fazla fotoğraf yükleniyor...</span>
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </main>
 

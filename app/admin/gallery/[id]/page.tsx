@@ -1,8 +1,7 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 interface IPhoto {
@@ -31,6 +30,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [failedUploads, setFailedUploads] = useState<File[]>([]);
   
   const [photos, setPhotos] = useState<IPhoto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,29 +44,27 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   });
 
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
-  
-  // YENİ: ÇOKLU SEÇİM STATELERİ
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
-
   const [applyWatermark, setApplyWatermark] = useState(true);
   const [watermarkText, setWatermarkText] = useState("Ömer Faruk Photography");
 
-  const fetchPhotos = async () => {
+  const fetchPhotos = useCallback(async () => {
     try {
-      const response = await fetch(`/api/photos?galleryId=${galleryId}&t=${Date.now()}`, { cache: "no-store" });
+      // API'ye limit=9999 parametresini ekleyerek admin için tüm fotoğrafların gelmesini sağlıyoruz
+      const response = await fetch(`/api/photos?galleryId=${galleryId}&limit=9999&t=${Date.now()}`, { cache: "no-store" });
       const resData = await response.json();
       if (resData.success) {
         setPhotos(resData.data);
-        setSelectedPhotoIds([]); // Liste yenilenince seçimleri temizle
+        setSelectedPhotoIds([]); 
       }
     } catch (error) {
       console.error("Fotoğraflar hata:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [galleryId]);
 
-  const fetchGalleryInfo = async () => {
+  const fetchGalleryInfo = useCallback(async () => {
     try {
       const response = await fetch(`/api/gallery-info?id=${galleryId}&t=${Date.now()}`, { cache: "no-store" });
       const resData = await response.json();
@@ -84,12 +82,12 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     } catch (error) {
       console.error("Galeri bilgileri hata:", error);
     }
-  };
+  }, [galleryId]);
 
   useEffect(() => {
     fetchPhotos();
     fetchGalleryInfo();
-  }, [galleryId]);
+  }, [fetchPhotos, fetchGalleryInfo]);
 
   useEffect(() => {
     if (gallery?.isSelectionCompleted && gallery?.isNotificationRead === false) {
@@ -137,7 +135,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         setGallery(resData.data);
         alert("Galeri kilidi başarıyla açıldı! Müşteri tekrar seçim yapabilir.");
       }
-    } catch (error) {
+    } catch {
       alert("Hata oluştu.");
     }
   };
@@ -181,18 +179,17 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     });
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    const fileArray = Array.from(files);
+  // Gelişmiş Toplu ve Kontrollü Yükleme Motoru
+  const processUploadBatch = async (filesToUpload: File[]) => {
     setIsUploading(true);
-    setUploadProgress({ current: 0, total: fileArray.length });
-    
+    setFailedUploads([]); 
     let successCount = 0;
+    let currentProgress = 0;
+    const newFailed: File[] = [];
 
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
+    setUploadProgress({ current: 0, total: filesToUpload.length });
+
+    const uploadSingleFile = async (file: File) => {
       try {
         let fileToUpload: File | Blob = file;
 
@@ -200,34 +197,90 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           fileToUpload = await addWatermarkToImage(file, watermarkText);
         }
 
-        const formData = new FormData();
-        formData.append("file", fileToUpload, file.name);
-        formData.append("galleryId", galleryId);
+        // 1. Sunucudan güvenli yükleme imzası ve kimlik bilgilerini al
+        const sigRes = await fetch("/api/upload/signature", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder: `studio-omer/galeri_${galleryId}`, galleryId })
+        });
         
-        const response = await fetch("/api/upload", { method: "POST", body: formData });
-        const resData = await response.json();
-        
-        if (resData.success) {
-          successCount++;
+        if (!sigRes.ok) {
+          const errData = await sigRes.json().catch(() => ({ error: "Bilinmeyen API hatası" }));
+          throw new Error(`İmza reddedildi: ${errData.error}`);
         }
+        // Aşağıdaki satırda folder'ı responseFolder olarak alıyoruz ki çakışma olmasın
+        const { timestamp, signature, folder: responseFolder, apiKey, cloudName } = await sigRes.json();
+
+        // 2. Doğrudan Cloudinary Sunucularına Gönder (Vercel RAM'ini yormadan)
+        const formData = new FormData();
+        formData.append("file", fileToUpload);
+        formData.append("api_key", apiKey);
+        formData.append("timestamp", timestamp.toString());
+        formData.append("signature", signature);
+        formData.append("folder", responseFolder);
+
+        const cloudinaryRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: "POST",
+          body: formData
+        });
+        
+        if (!cloudinaryRes.ok) throw new Error("Cloudinary yükleme hatası");
+        const cloudinaryData = await cloudinaryRes.json();
+
+        // 3. Başarılı yükleme bilgisini ve meta verileri lokal veritabanına işle
+        const dbRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            galleryId,
+            secure_url: cloudinaryData.secure_url,
+            public_id: cloudinaryData.public_id,
+            originalName: file.name.replace(/[^a-z0-9.]/gi, '_'),
+            width: cloudinaryData.width,
+            height: cloudinaryData.height,
+            bytes: cloudinaryData.bytes,
+            format: cloudinaryData.format
+          })
+        });
+        
+        if (!dbRes.ok) throw new Error("Veritabanı kaydı hatası");
+
+        successCount++;
       } catch (error) {
         console.error(`${file.name} yüklenemedi:`, error);
+        newFailed.push(file);
+      } finally {
+        currentProgress++;
+        setUploadProgress({ current: currentProgress, total: filesToUpload.length });
       }
-      
-      setUploadProgress({ current: i + 1, total: fileArray.length });
+    };
+
+    // Aynı anda maksimum 3 görseli paralel yükle (Tarayıcı kilitlenmesini önler)
+    const CONCURRENCY_LIMIT = 3;
+    for (let i = 0; i < filesToUpload.length; i += CONCURRENCY_LIMIT) {
+      const chunk = filesToUpload.slice(i, i + CONCURRENCY_LIMIT);
+      await Promise.all(chunk.map(file => uploadSingleFile(file)));
     }
 
     setIsUploading(false);
     setUploadProgress(null);
-    e.target.value = ""; 
     
     if (successCount > 0) {
       fetchPhotos(); 
     }
     
-    if (successCount !== fileArray.length) {
-      alert(`${fileArray.length} fotoğraftan sadece ${successCount} tanesi yüklenebildi.`);
+    if (newFailed.length > 0) {
+      setFailedUploads(newFailed);
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const fileArray = Array.from(files);
+    e.target.value = ""; 
+    await processUploadBatch(fileArray);
   };
 
   const handleDeletePhoto = async (photoId: string) => {
@@ -237,23 +290,31 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
       const resData = await response.json();
       if (resData.success) fetchPhotos();
       else alert("Hata: " + resData.error);
-    } catch (error) {
+    } catch {
       alert("Sunucu bağlantı hatası.");
     }
   };
 
-  // YENİ: TOPLU SİLME FONKSİYONU
   const handleBulkDelete = async () => {
     if (!window.confirm(`${selectedPhotoIds.length} adet fotoğrafı kalıcı olarak silmek istediğinize emin misiniz?`)) return;
     
     try {
-      // Paralel silme işlemi başlat (hız için Promise.all kullanıyoruz)
-      await Promise.all(
-        selectedPhotoIds.map(id => fetch(`/api/photos?id=${id}`, { method: "DELETE" }))
-      );
-      alert(`${selectedPhotoIds.length} fotoğraf başarıyla silindi.`);
-      fetchPhotos();
-    } catch (error) {
+      // Tek tek döngüyle istek atmak yerine tek bir istekle tüm ID'leri gövdede (body) gönderiyoruz
+      const response = await fetch("/api/photos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedPhotoIds })
+      });
+      
+      const resData = await response.json();
+      
+      if (resData.success) {
+        alert(`${selectedPhotoIds.length} fotoğraf hem veritabanından hem de Cloudinary'den başarıyla temizlendi.`);
+        fetchPhotos();
+      } else {
+        alert("Hata: " + resData.error);
+      }
+    } catch {
       alert("Toplu silme sırasında bir hata oluştu.");
     }
   };
@@ -270,7 +331,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         setGallery(resData.data);
         alert("Kapak fotoğrafı ayarlandı!");
       }
-    } catch (error) {
+    } catch {
       alert("Hata oluştu.");
     }
   };
@@ -290,7 +351,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         alert("Galeri başarıyla silindi.");
         router.push("/admin");
       }
-    } catch (error) {
+    } catch {
       alert("Silme hatası.");
     }
   };
@@ -309,7 +370,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         setGallery(resData.data);
         setIsEditing(false); 
       }
-    } catch (error) {
+    } catch {
       alert("Güncelleme hatası.");
     }
   };
@@ -324,7 +385,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   const favoriteCount = photos.filter(photo => photo.isFavorite).length;
   const displayedPhotos = showOnlyFavorites ? photos.filter(photo => photo.isFavorite) : photos;
   
-  // YENİ: TÜMÜNÜ SEÇ/TEMİZLE
   const handleSelectAll = () => {
     if (selectedPhotoIds.length === displayedPhotos.length) {
       setSelectedPhotoIds([]);
@@ -334,6 +394,12 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
   };
 
   const selectedIndex = displayedPhotos.findIndex(p => p.url === selectedImage);
+
+  useEffect(() => {
+    if (showOnlyFavorites && favoriteCount === 0) {
+      setTimeout(() => setShowOnlyFavorites(false), 0);
+    }
+  }, [favoriteCount, showOnlyFavorites]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -475,6 +541,22 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+        {/* Başarısız Dosyalar için Yeniden Deneme Paneli */}
+        {failedUploads.length > 0 && (
+          <div className="bg-red-50 p-4 rounded-xl border border-red-200 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h4 className="text-red-800 font-bold text-base">{failedUploads.length} fotoğraf yüklenemedi.</h4>
+              <p className="text-red-600 text-xs sm:text-sm">Ağ bağlantısı kesintisi veya geçici bir hatadan dolayı bazı dosyalar aktarılamadı. Tarayıcıyı yenilemeden tekrar deneyebilirsiniz.</p>
+            </div>
+            <button 
+              onClick={() => processUploadBatch(failedUploads)}
+              className="bg-red-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors whitespace-nowrap shadow-sm flex items-center gap-2"
+            >
+              🔄 Hatalıları Tekrar Dene
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 border-b border-zinc-200 pb-4">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-zinc-900">
@@ -534,9 +616,8 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
                   ${selectedPhotoIds.includes(photo._id) ? 'ring-2 ring-black border-transparent scale-95 opacity-90' : gallery?.coverImage === photo.url ? 'border-blue-500 hover:shadow-md' : 'border-transparent hover:shadow-md'}`} 
                 onClick={() => setSelectedImage(photo.url)}
               >
-                <Image src={photo.url} alt="Fotoğraf" fill className="object-cover transition-transform duration-500 group-hover:scale-105" sizes="(max-width: 768px) 50vw, 20vw" />
+                <img src={photo.url} alt="Fotoğraf" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                 
-                {/* SOL ÜST: Seçim Kutucuğu ve Favori İkonu */}
                 <div className="absolute top-2 left-2 z-20 flex flex-col gap-2 items-start">
                   <input 
                     type="checkbox"
@@ -559,7 +640,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
                   <div className="absolute bottom-0 inset-x-0 bg-blue-500/90 text-white text-[10px] font-bold text-center py-1 z-10 uppercase tracking-widest pointer-events-none">Kapak</div>
                 )}
                 
-                {/* SAĞ ÜST: Mobilde her zaman görünür, masaüstünde hover ile görünür ikonlar */}
                 <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 z-10 flex gap-1">
                   <button onClick={(e) => { e.stopPropagation(); handleSetCover(photo.url); }} className="bg-blue-500/90 backdrop-blur-sm text-white px-2 py-1.5 rounded text-[10px] sm:text-xs font-semibold hover:bg-blue-600 shadow-sm transition-colors">Kapak</button>
                   <button onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo._id); }} className="bg-red-500/90 backdrop-blur-sm text-white px-2 py-1.5 rounded text-[10px] sm:text-xs font-semibold hover:bg-red-600 shadow-sm transition-colors">Sil</button>
@@ -570,7 +650,6 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
         )}
       </div>
 
-      {/* YENİ: SEÇİLENLER İÇİN TOPLU İŞLEM MENÜSÜ */}
       {selectedPhotoIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl z-40 flex items-center gap-6 w-[90%] sm:w-auto justify-between border border-zinc-800 transition-all duration-300">
           <span className="font-medium text-sm sm:text-base whitespace-nowrap">
@@ -648,7 +727,7 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
               </div>
             )}
             
-            <img src={selectedImage} alt="Büyük" className="max-w-full max-h-[85vh] object-contain select-none shadow-2xl px-4 sm:px-0" />
+            <img src={selectedImage} alt="Büyük Görsel" className="max-w-full max-h-[85vh] object-contain select-none shadow-2xl px-4 sm:px-0" />
           </div>
 
           {selectedIndex < displayedPhotos.length - 1 && (

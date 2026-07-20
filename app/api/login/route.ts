@@ -1,25 +1,73 @@
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+import { createSession } from "@/lib/session";
+
+// Rate Limiter
+const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
+const RATE_LIMIT_WINDOW = 60 * 1000;
+const MAX_ATTEMPTS = 5;
+
+const LoginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
 
 export async function POST(req: Request) {
+  
+  console.log("--- API/LOGIN TETİKLENDİ ---"); // Bunu en başa ekle
+  
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown_ip";
+    const now = Date.now();
+    
+    const clientData = rateLimitMap.get(ip) || { count: 0, lastReset: now };
+    
+    if (now - clientData.lastReset > RATE_LIMIT_WINDOW) {
+      clientData.count = 0;
+      clientData.lastReset = now;
+    }
+    
+    if (clientData.count >= MAX_ATTEMPTS) {
+      return NextResponse.json(
+        { success: false, error: "Çok fazla hatalı deneme yaptınız." },
+        { status: 429 } 
+      );
+    }
+    
+    clientData.count += 1;
+    rateLimitMap.set(ip, clientData);
+
     const body = await req.json();
+    const result = LoginSchema.safeParse(body);
 
-    if (body.username === 'admin' && body.password === 'omer1234') { 
-      
-      const cookieStore = await cookies();
-      cookieStore.set('admin_token', 'studio_secret_key_2026', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7, // 1 hafta
-        path: '/',
-      });
-
-      return NextResponse.json({ success: true });
+    if (!result.success) {
+      return NextResponse.json({ success: false, error: "Geçersiz istek" }, { status: 400 });
     }
 
-    return NextResponse.json({ success: false, error: 'Hatalı kullanıcı adı veya şifre' }, { status: 401 });
+    const { username, password } = result.data;
+
+    // Kullanıcı adı kontrolü
+    if (username !== process.env.ADMIN_USERNAME) {
+      return NextResponse.json({ success: false, error: "Kullanıcı adı veya şifre hatalı" }, { status: 401 });
+    }
+
+    // Şifre kontrolü
+    const passwordOk = await bcrypt.compare(
+      password,
+      process.env.ADMIN_PASSWORD_HASH!
+    );
+
+    if (!passwordOk) {
+      return NextResponse.json({ success: false, error: "Kullanıcı adı veya şifre hatalı" }, { status: 401 });
+    }
+
+    rateLimitMap.delete(ip);
+    await createSession(username);
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Sunucu hatası' }, { status: 500 });
+    console.error("Login Error:", error);
+    return NextResponse.json({ success: false, error: "Sunucu hatası" }, { status: 500 });
   }
 }
