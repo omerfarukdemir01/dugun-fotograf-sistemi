@@ -34,20 +34,28 @@ export async function POST(request: Request) {
         format,
       }], { session });
 
+      // --- DÜZELTME BURADA ---
+      // 2. Sayaç güncellemesini de AYNI transaction içine alıyoruz.
+      // { session } parametresi sayesinde, fotoğraf kaydedilmezse sayaç da artmaz.
+      await Gallery.findByIdAndUpdate(
+        galleryId, 
+        { $inc: { photoCount: 1 } },
+        { session, new: true } // { session } şart!
+      );
+
+      // İki işlem de başarılıysa kaydet
       await session.commitTransaction();
     } catch (err) {
+      // Herhangi bir hata oluşursa iki işlemi de geri al (rollback)
       await session.abortTransaction();
-      throw err;
+      throw err; // Hatayı dış try'a fırlat
     } finally {
       session.endSession();
     }
 
-    // 2. ÇAKIŞMA ÇÖZÜMÜ: Sayaç güncellemesini transaction ({ session }) DIŞINDA yapıyoruz.
-    await Gallery.findByIdAndUpdate(galleryId, {
-      $inc: { photoCount: 1 },
-    });
-
+    // Artık veri tutarlı, güvenle dönebiliriz.
     return NextResponse.json({ success: true, url: secure_url });
+
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Yetkisiz erişim." }, { status: 401 });
