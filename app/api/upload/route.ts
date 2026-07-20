@@ -3,7 +3,9 @@ import { connectToDatabase } from "@/lib/mongodb";
 import Photo from "@/models/Photo";
 import Gallery from "@/models/Gallery";
 import { requireAdmin } from "@/lib/admin";
-import mongoose from "mongoose";
+
+const ALLOWED_FORMATS = ["jpg", "jpeg", "png", "webp"];
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB sınırı
 
 export async function POST(request: Request) {
   try {
@@ -16,44 +18,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Eksik veri gönderildi." }, { status: 400 });
     }
 
-    await connectToDatabase();
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-      // 1. Fotoğraf kaydını transaction (güvenli işlem) içinde yapıyoruz
-      await Photo.create([{
-        galleryId,
-        url: secure_url,
-        publicId: public_id,
-        originalName,
-        width,
-        height,
-        bytes,
-        format,
-      }], { session });
-
-      // --- DÜZELTME BURADA ---
-      // 2. Sayaç güncellemesini de AYNI transaction içine alıyoruz.
-      // { session } parametresi sayesinde, fotoğraf kaydedilmezse sayaç da artmaz.
-      await Gallery.findByIdAndUpdate(
-        galleryId, 
-        { $inc: { photoCount: 1 } },
-        { session, new: true } // { session } şart!
-      );
-
-      // İki işlem de başarılıysa kaydet
-      await session.commitTransaction();
-    } catch (err) {
-      // Herhangi bir hata oluşursa iki işlemi de geri al (rollback)
-      await session.abortTransaction();
-      throw err; // Hatayı dış try'a fırlat
-    } finally {
-      session.endSession();
+    // 1. Gerçek MIME/Format Doğrulaması
+    if (!format || !ALLOWED_FORMATS.includes(format.toLowerCase())) {
+      return NextResponse.json({ 
+        error: `Geçersiz dosya türü tespit edildi (${format}). Sadece JPG, PNG ve WEBP yüklenebilir.` 
+      }, { status: 400 });
     }
 
-    // Artık veri tutarlı, güvenle dönebiliriz.
+    // 2. Maksimum Dosya Boyutu Kontrolü
+    if (bytes > MAX_FILE_SIZE) {
+      const mbSize = (bytes / 1024 / 1024).toFixed(2);
+      return NextResponse.json({ 
+        error: `Dosya boyutu çok büyük (${mbSize} MB). Maksimum 25 MB izin veriliyor.` 
+      }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    // ÇÖZÜM: Transaction (session) kaldırıldı. Paralel (aynı anda 3'lü) yüklemelerde 
+    // WriteConflict (çakışma) almamak için işlemleri doğrudan yapıyoruz.
+    
+    // 1. Fotoğrafı veritabanına kaydet
+    await Photo.create({
+      galleryId,
+      url: secure_url,
+      publicId: public_id,
+      originalName,
+      width,
+      height,
+      bytes,
+      format,
+    });
+
+    // 2. Sayacı atomik olarak artır (MongoDB $inc işlemi kendi içinde güvenlidir)
+    await Gallery.findByIdAndUpdate(
+      galleryId, 
+      { $inc: { photoCount: 1 } }
+    );
+
     return NextResponse.json({ success: true, url: secure_url });
 
   } catch (error) {
