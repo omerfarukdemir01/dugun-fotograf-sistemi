@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import Gallery from "@/models/Gallery";
 import Photo from "@/models/Photo";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 const GalleryCreateSchema = z.object({
   title: z.string().min(1, "Başlık zorunludur."),
@@ -24,15 +25,25 @@ export async function POST(request: Request) {
     const { title, date, password } = validation.data;
     await connectToDatabase();
 
+    // Şifre varsa bcrypt ile hash'le, yoksa boş string birak
+    let hashedPassword = "";
+    if (password && password.trim() !== "") {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+
     const newGallery = await Gallery.create({
       title,
       eventDate: date,
-      password: password || "",
+      password: hashedPassword,
     });
 
-    return NextResponse.json({ success: true, data: newGallery }, { status: 201 });
+    // Yanıtta şifreyi dışarı sızdırmıyoruz
+    const galleryData = newGallery.toObject();
+    delete galleryData.password;
+
+    return NextResponse.json({ success: true, data: galleryData }, { status: 201 });
   } catch (error) {
-    console.error("Gallery POST hatası:", error); // Uyarıyı çözen satır
+    console.error("Gallery POST hatası:", error);
     return NextResponse.json({ error: "Veritabanına kaydedilirken bir hata oluştu." }, { status: 500 });
   }
 }
@@ -42,7 +53,8 @@ export async function GET() {
     await requireAdmin();
     await connectToDatabase();
 
-    const galleries = await Gallery.find({}).sort({ createdAt: -1 }).lean();
+    // Şifre alanını çekmiyoruz (-password)
+    const galleries = await Gallery.find({}).select("-password").sort({ createdAt: -1 }).lean();
 
     const galleriesWithRealCounts = await Promise.all(
       galleries.map(async (gallery) => {
@@ -53,7 +65,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: galleriesWithRealCounts }, { status: 200 });
   } catch (error) {
-    console.error("Gallery GET hatası:", error); // Uyarıyı çözen satır
+    console.error("Gallery GET hatası:", error);
     return NextResponse.json({ error: "Galeriler yüklenirken bir hata oluştu." }, { status: 500 });
   }
 }

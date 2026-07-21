@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import Gallery from "@/models/Gallery";
 import { cookies } from "next/headers";
 import { SignJWT } from "jose";
+import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
   try {
@@ -20,12 +21,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Galeri bulunamadı." }, { status: 404 });
     }
 
-    if (gallery.password !== password) {
+    let isMatch = false;
+
+    if (gallery.password) {
+      if (gallery.password.startsWith("$2a$") || gallery.password.startsWith("$2b$")) {
+        isMatch = await bcrypt.compare(password, gallery.password);
+      } else {
+        isMatch = (password === gallery.password);
+      }
+    }
+
+    if (!isMatch) {
       return NextResponse.json({ error: "Hatalı şifre, lütfen tekrar deneyin." }, { status: 401 });
     }
 
     const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "omer_studio_secret");
-    const token = await new SignJWT({ galleryId, password: gallery.password })
+    
+    // ÇÖZÜM: O anki şifrenin hash'ini token içine 'hashKey' olarak ekliyoruz
+    const token = await new SignJWT({ 
+      galleryId, 
+      isAuthorized: true,
+      hashKey: gallery.password || "" 
+    })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime("3h")
@@ -42,7 +59,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Gallery Auth hatası:", error); // Uyarıyı çözen satır
+    console.error("Gallery Auth hatası:", error);
     return NextResponse.json({ error: "Sunucu hatası." }, { status: 500 });
   }
 }

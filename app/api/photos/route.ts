@@ -31,6 +31,28 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
 
+    // 1. Önce Galeriyi bul
+    const gallery = await Gallery.findById(galleryId).lean();
+    if (!gallery) {
+      return NextResponse.json({ error: "Galeri bulunamadı." }, { status: 404 });
+    }
+
+    // 2. Admin mi diye sessizce kontrol et
+    let isAdmin = false;
+    try {
+      await requireAdmin();
+      isAdmin = true;
+    } catch {
+      isAdmin = false;
+    }
+
+    // 3. API KİLİDİ: Galeri pasifse ve istek atan kişi Admin DEĞİLSE 403 Forbidden dön!
+    if (!gallery.isActive && !isAdmin) {
+      return NextResponse.json({ 
+        error: "Bu galeri erişime kapatılmıştır. Fotoğraflar görüntülenemez." 
+      }, { status: 403 });
+    }
+
     const total = await Photo.countDocuments({ galleryId });
 
     // .lean() kullanarak performansı uçuruyoruz (Madde 7)

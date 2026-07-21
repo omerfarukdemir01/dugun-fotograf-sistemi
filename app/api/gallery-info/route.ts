@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Gallery from "@/models/Gallery";
 import Photo from "@/models/Photo";
@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/admin";
 import mongoose from "mongoose";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
+import bcrypt from "bcryptjs";
 
 export async function GET(request: Request) {
   try {
@@ -33,23 +34,27 @@ export async function GET(request: Request) {
           const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "omer_studio_secret");
           const { payload } = await jwtVerify(token, secret);
           
-          if (payload.password === gallery.password) {
+          // ÇÖZÜM: Token'daki hashKey ile veritabanındaki güncel şifre hash'i aynı mı diye bakıyoruz!
+          // Eğer admin şifreyi değiştirmişse bunlar uyuşmaz ve isAuthorized otomatik 'false' olur.
+          if (payload.galleryId === id && payload.isAuthorized && payload.hashKey === gallery.password) {
             isAuthorized = true;
           } else {
             isAuthorized = false;
           }
-        } catch (err) {
-          console.error("JWT doğrulama hatası:", err);
+        } catch {
           isAuthorized = false; 
         }
       }
     }
 
     const photoCount = await Photo.countDocuments({ galleryId: id });
-
-    // Şirket isteği (Madde 2): Şifre alanını tarayıcıya/isteğe açık şekilde asla döndürme!
     const responseGallery = { ...gallery, photoCount };
-    delete responseGallery.password;
+
+    if (gallery.password) {
+      responseGallery.password = "********"; 
+    } else {
+      responseGallery.password = "";
+    }
 
     return NextResponse.json({ success: true, data: responseGallery, isAuthorized });
   } catch (error) {
@@ -81,17 +86,28 @@ export async function PUT(request: Request) {
 
     if (body.eventDate) updateData.eventDate = new Date(body.eventDate);
 
+    // ÇÖZÜMÜN 2. KISMI: Arayüzden gelen duruma göre akıllı şifre yönetimi
     if (body.password !== undefined) {
-       updateData.password = body.password;
+      if (body.password === "********") {
+        // Kullanıcı şifreyi değiştirmemiş, veritabanındaki hash'e dokunmuyoruz!
+      } else if (body.password === "") {
+        // Kullanıcı inputu tamamen silmiş, şifreyi kaldır
+        updateData.password = ""; 
+      } else {
+        // Kullanıcı yeni bir şifre yazmış, hash'leyip kaydediyoruz
+        updateData.password = await bcrypt.hash(body.password, 10);
+      }
     }
 
     if (body.isSelectionCompleted !== undefined) updateData.isSelectionCompleted = body.isSelectionCompleted;
     if (body.isNotificationRead !== undefined) updateData.isNotificationRead = body.isNotificationRead;
 
-    // Şifreyi dönerken de hariç tutuyoruz (-password)
-    const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { new: true })
+    // { new: true } yerine modern Mongoose standardı olan { returnDocument: "after" } kullanıyoruz
+    const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { returnDocument: "after" })
       .select("-password")
       .lean();
+
+    return NextResponse.json({ success: true, data: updatedGallery });
 
     return NextResponse.json({ success: true, data: updatedGallery });
   } catch (error) {

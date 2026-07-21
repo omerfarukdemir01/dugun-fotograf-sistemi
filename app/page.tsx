@@ -1,7 +1,5 @@
-/* eslint-disable @next/next/no-img-element */
-"use client";
-
 import Link from "next/link";
+import Image from "next/image";
 
 export default function HomePage() {
   return (
@@ -40,10 +38,12 @@ export default function HomePage() {
         {/* SİNEMATİK HERO - ARKADA FOTOĞRAFLA */}
         <section className="relative w-full h-[85vh] flex flex-col items-center justify-center text-center px-4 overflow-hidden">
           <div className="absolute inset-0">
-             <img 
+             <Image 
                src="https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2070&auto=format&fit=crop" 
                alt="Hero Wedding" 
-               className="w-full h-full object-cover"
+               fill
+               priority
+               className="object-cover"
              />
              <div className="absolute inset-0 bg-stone-900/40"></div> 
           </div>
@@ -75,17 +75,41 @@ export default function HomePage() {
           
           <div className="grid md:grid-cols-3 gap-12 md:gap-16">
             <div className="text-center group">
-              <img src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8YnJpZGV8ZW58MHx8MHx8fDA%3D" alt="Düğün Belgeseli" />
+              <div className="relative w-full h-64 mb-6">
+                <Image 
+                  src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8YnJpZGV8ZW58MHx8MHx8fDA%3D" 
+                  alt="Düğün Belgeseli" 
+                  fill 
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" 
+                />
+              </div>
               <h3 className="text-xl font-serif mb-4 text-stone-800">Düğün Belgeseli</h3>
               <p className="text-stone-500 font-light leading-relaxed text-sm">Hazırlık telaşınızdan, ilk dansınıza kadar tüm duygusal anlarınızı sinematik bir zarafetle kayıt altına alıyoruz.</p>
             </div>
             <div className="text-center group">
-              <img src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=600&auto=format&fit=crop" alt="Doğa ve Dış Çekim" className="w-full h-64 object-cover mb-6 rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" />
+              <div className="relative w-full h-64 mb-6">
+                <Image 
+                  src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=600&auto=format&fit=crop" 
+                  alt="Doğa ve Dış Çekim" 
+                  fill 
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" 
+                />
+              </div>
               <h3 className="text-xl font-serif mb-4 text-stone-800">Doğa & Dış Çekim</h3>
               <p className="text-stone-500 font-light leading-relaxed text-sm">Gün ışığının en yumuşak saatlerinde, doğanın romantik dokusuyla aşkınızı en saf haliyle fotoğraflıyoruz.</p>
             </div>
             <div className="text-center group">
-              <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=80&w=600&auto=format&fit=crop" alt="Save the Date" className="w-full h-64 object-cover mb-6 rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" />
+              <div className="relative w-full h-64 mb-6">
+                <Image 
+                  src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=80&w=600&auto=format&fit=crop" 
+                  alt="Save the Date" 
+                  fill 
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover rounded-lg opacity-90 group-hover:opacity-100 transition-opacity" 
+                />
+              </div>
               <h3 className="text-xl font-serif mb-4 text-stone-800">Save the Date</h3>
               <p className="text-stone-500 font-light leading-relaxed text-sm">Sevdiklerinize tarihinizi duyurmanız için, tarzınızı yansıtan, yaratıcı ve sanatsal kısa hikayeler oluşturuyoruz.</p>
             </div>
@@ -103,11 +127,21 @@ export default function HomePage() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <img src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=80&w=800&auto=format&fit=crop" alt="Portfolyo 1" className="md:col-span-2 aspect-[16/9] object-cover rounded-sm" />
-              <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=80&w=800&auto=format&fit=crop" alt="Portfolyo 2" className="aspect-[3/4] object-cover rounded-sm" />
-              <img src="https://images.unsplash.com/photo-1607190074257-dd4b7af0309f?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8YnJpZGV8ZW58MHx8MHx8fDA%3D" alt="Portfolyo 3" />
-              <img src="https://images.unsplash.com/photo-1550784718-990c6de52adf?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGJyaWRlfGVufDB8fDB8fHww" alt="Portfolyo 4" />
-              <img src="https://images.unsplash.com/photo-1492175742197-ed20dc5a6bed?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGJyaWRlfGVufDB8fDB8fHww" alt="Portfolyo 5" />
+              <div className="md:col-span-2 relative aspect-[16/9]">
+                <Image src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=80&w=800&auto=format&fit=crop" alt="Portfolyo 1" fill sizes="(max-width: 768px) 100vw, 66vw" className="object-cover rounded-sm" />
+              </div>
+              <div className="relative aspect-[3/4]">
+                <Image src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=80&w=800&auto=format&fit=crop" alt="Portfolyo 2" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover rounded-sm" />
+              </div>
+              <div className="relative aspect-square">
+                <Image src="https://images.unsplash.com/photo-1607190074257-dd4b7af0309f?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8YnJpZGV8ZW58MHx8MHx8fDA%3D" alt="Portfolyo 3" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover rounded-sm" />
+              </div>
+              <div className="relative aspect-square">
+                <Image src="https://images.unsplash.com/photo-1550784718-990c6de52adf?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGJyaWRlfGVufDB8fDB8fHww" alt="Portfolyo 4" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover rounded-sm" />
+              </div>
+              <div className="relative aspect-square">
+                <Image src="https://images.unsplash.com/photo-1492175742197-ed20dc5a6bed?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGJyaWRlfGVufDB8fDB8fHww" alt="Portfolyo 5" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover rounded-sm" />
+              </div>
             </div>
           </div>
         </section>
