@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const { username, password } = result.data;
 
     // Environment değişkenleri kontrolü
-    const envUsername = process.env.ADMIN_USERNAME || "";
+    const envUsername = process.env.ADMIN_USERNAME || "admin";
     const envPasswordHash = process.env.ADMIN_PASSWORD_HASH || process.env.ADMIN_PASSWORD || "";
 
     const isValidUsername = username === envUsername;
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       await LoginAttempt.deleteOne({ ip });
     }
 
+    // Session oluşturma
     await createSession(username);
 
     return NextResponse.json({ success: true });

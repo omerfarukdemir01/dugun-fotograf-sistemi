@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 
-const secret = new TextEncoder().encode(process.env.SESSION_SECRET);
+const secretKey = process.env.SESSION_SECRET || process.env.JWT_SECRET || "studio_omer_default_fallback_secret_key_2026_xyz";
+const secret = new TextEncoder().encode(secretKey);
 
 export type SessionPayload = JWTPayload & {
   username: string;
