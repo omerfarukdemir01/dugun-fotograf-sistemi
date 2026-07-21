@@ -13,11 +13,9 @@ const LoginSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  console.log("--- API/LOGIN TETİKLENDİ ---");
-
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(',')[0] || "unknown_ip";
-    
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown_ip";
+
     await connectToDatabase();
 
     // 1. IP için veritabanındaki deneme kaydını kontrol et
@@ -39,12 +37,22 @@ export async function POST(req: Request) {
 
     const { username, password } = result.data;
 
-    // Kullanıcı adı veya Şifre Hatalıysa Deneme Sayısını Artır
-    const isValidUsername = username === process.env.ADMIN_USERNAME;
-    const isValidPassword = isValidUsername && (await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH!));
+    // Environment değişkenleri kontrolü
+    const envUsername = process.env.ADMIN_USERNAME || "";
+    const envPasswordHash = process.env.ADMIN_PASSWORD_HASH || process.env.ADMIN_PASSWORD || "";
+
+    const isValidUsername = username === envUsername;
+    let isValidPassword = false;
+
+    if (isValidUsername && envPasswordHash) {
+      if (envPasswordHash.startsWith("$2a$") || envPasswordHash.startsWith("$2b$")) {
+        isValidPassword = await bcrypt.compare(password, envPasswordHash);
+      } else {
+        isValidPassword = password === envPasswordHash;
+      }
+    }
 
     if (!isValidUsername || !isValidPassword) {
-      // Hatalı girişte veritabanındaki denemeyi artır veya yeni döküman oluştur
       if (attemptRecord) {
         attemptRecord.attempts += 1;
         await attemptRecord.save();
