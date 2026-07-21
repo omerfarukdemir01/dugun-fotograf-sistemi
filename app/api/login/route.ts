@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { createSession } from "@/lib/session";
+import { connectToDatabase } from "@/lib/mongodb";
+import LoginAttempt from "@/models/LoginAttempt";
 
-// Rate Limiter
-const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
-const RATE_LIMIT_WINDOW = 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 const LoginSchema = z.object({
@@ -14,29 +13,22 @@ const LoginSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  
-  console.log("--- API/LOGIN TETİKLENDİ ---"); // Bunu en başa ekle
-  
+  console.log("--- API/LOGIN TETİKLENDİ ---");
+
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown_ip";
-    const now = Date.now();
+    const ip = req.headers.get("x-forwarded-for")?.split(',')[0] || "unknown_ip";
     
-    const clientData = rateLimitMap.get(ip) || { count: 0, lastReset: now };
-    
-    if (now - clientData.lastReset > RATE_LIMIT_WINDOW) {
-      clientData.count = 0;
-      clientData.lastReset = now;
-    }
-    
-    if (clientData.count >= MAX_ATTEMPTS) {
+    await connectToDatabase();
+
+    // 1. IP için veritabanındaki deneme kaydını kontrol et
+    const attemptRecord = await LoginAttempt.findOne({ ip });
+
+    if (attemptRecord && attemptRecord.attempts >= MAX_ATTEMPTS) {
       return NextResponse.json(
-        { success: false, error: "Çok fazla hatalı deneme yaptınız." },
-        { status: 429 } 
+        { success: false, error: "Çok fazla hatalı deneme yaptınız. Lütfen 1 dakika sonra tekrar deneyin." },
+        { status: 429 }
       );
     }
-    
-    clientData.count += 1;
-    rateLimitMap.set(ip, clientData);
 
     const body = await req.json();
     const result = LoginSchema.safeParse(body);
@@ -47,22 +39,27 @@ export async function POST(req: Request) {
 
     const { username, password } = result.data;
 
-    // Kullanıcı adı kontrolü
-    if (username !== process.env.ADMIN_USERNAME) {
+    // Kullanıcı adı veya Şifre Hatalıysa Deneme Sayısını Artır
+    const isValidUsername = username === process.env.ADMIN_USERNAME;
+    const isValidPassword = isValidUsername && (await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH!));
+
+    if (!isValidUsername || !isValidPassword) {
+      // Hatalı girişte veritabanındaki denemeyi artır veya yeni döküman oluştur
+      if (attemptRecord) {
+        attemptRecord.attempts += 1;
+        await attemptRecord.save();
+      } else {
+        await LoginAttempt.create({ ip, attempts: 1 });
+      }
+
       return NextResponse.json({ success: false, error: "Kullanıcı adı veya şifre hatalı" }, { status: 401 });
     }
 
-    // Şifre kontrolü
-    const passwordOk = await bcrypt.compare(
-      password,
-      process.env.ADMIN_PASSWORD_HASH!
-    );
-
-    if (!passwordOk) {
-      return NextResponse.json({ success: false, error: "Kullanıcı adı veya şifre hatalı" }, { status: 401 });
+    // Başarılı Giriş Yapıldıysa Deneme Kaydını Sil
+    if (attemptRecord) {
+      await LoginAttempt.deleteOne({ ip });
     }
 
-    rateLimitMap.delete(ip);
     await createSession(username);
 
     return NextResponse.json({ success: true });

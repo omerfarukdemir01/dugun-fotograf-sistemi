@@ -337,23 +337,46 @@ export default function GalleryDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const handleDeleteGallery = async () => {
+const handleDeleteGallery = async () => {
     const adminPass = window.prompt("DİKKAT! Galeriyi tamamen silmek üzeresiniz.\n\nİşlemi onaylamak için lütfen ADMIN şifrenizi giriniz:");
     
-    if (adminPass !== "admin123") {
-      if (adminPass !== null) alert("Hata: Admin şifresi yanlış! Silme işlemi iptal edildi.");
+    // Kullanıcı iptale bastıysa dur
+    if (adminPass === null) return; 
+
+    // Şifre boş girildiyse uyar
+    if (adminPass.trim() === "") {
+      alert("Hata: Şifre boş bırakılamaz!");
       return;
     }
     
     try {
+      // 1. Girdiğin şifreyi API'ye gönderip doğrulatıyoruz
+      const verifyRes = await fetch("/api/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: adminPass })
+      });
+      
+      const verifyData = await verifyRes.json();
+
+      // Şifre yanlışsa silmeyi iptal et
+      if (!verifyData.success) {
+        alert("Hata: Admin şifresi yanlış! Silme işlemi iptal edildi.");
+        return;
+      }
+
+      // 2. Şifre doğruysa galeriyi sil
       const response = await fetch(`/api/gallery-info?id=${galleryId}`, { method: "DELETE" });
       const resData = await response.json();
+      
       if (resData.success) {
         alert("Galeri başarıyla silindi.");
         router.push("/admin");
+      } else {
+        alert("Silme hatası: " + resData.error);
       }
     } catch {
-      alert("Silme hatası.");
+      alert("Sunucuyla iletişim kurulamadı, işlem başarısız.");
     }
   };
 

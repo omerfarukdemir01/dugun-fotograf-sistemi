@@ -39,17 +39,21 @@ export async function GET(request: Request) {
             isAuthorized = false;
           }
         } catch (err) {
-          console.error("JWT doğrulama hatası:", err); // 'err' uyarısını çözen satır
+          console.error("JWT doğrulama hatası:", err);
           isAuthorized = false; 
         }
       }
     }
 
-    gallery.photoCount = await Photo.countDocuments({ galleryId: id });
+    const photoCount = await Photo.countDocuments({ galleryId: id });
 
-    return NextResponse.json({ success: true, data: gallery, isAuthorized });
+    // Şirket isteği (Madde 2): Şifre alanını tarayıcıya/isteğe açık şekilde asla döndürme!
+    const responseGallery = { ...gallery, photoCount };
+    delete responseGallery.password;
+
+    return NextResponse.json({ success: true, data: responseGallery, isAuthorized });
   } catch (error) {
-    console.error("Gallery Info GET hatası:", error); // Uyarıyı çözen satır
+    console.error("Gallery Info GET hatası:", error);
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
@@ -84,10 +88,14 @@ export async function PUT(request: Request) {
     if (body.isSelectionCompleted !== undefined) updateData.isSelectionCompleted = body.isSelectionCompleted;
     if (body.isNotificationRead !== undefined) updateData.isNotificationRead = body.isNotificationRead;
 
-    const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { new: true }).lean();
+    // Şifreyi dönerken de hariç tutuyoruz (-password)
+    const updatedGallery = await Gallery.findByIdAndUpdate(id, updateData, { new: true })
+      .select("-password")
+      .lean();
+
     return NextResponse.json({ success: true, data: updatedGallery });
   } catch (error) {
-    console.error("Gallery Info PUT hatası:", error); // Uyarıyı çözen satır
+    console.error("Gallery Info PUT hatası:", error);
     return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
   }
 }
@@ -97,6 +105,11 @@ export async function DELETE(request: Request) {
     await requireAdmin();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
+
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: "Geçersiz ID" }, { status: 400 });
+    }
+
     await connectToDatabase();
     await Photo.deleteMany({ galleryId: id });
     await Gallery.findByIdAndDelete(id);

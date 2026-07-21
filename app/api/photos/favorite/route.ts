@@ -1,7 +1,8 @@
-
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import Photo from "@/models/Photo";
+import Gallery from "@/models/Gallery"; // Galerinin kilitli olup olmadığını kontrol etmek için eklendi
+import mongoose from "mongoose";
 
 // Favori durumunu güncelleme (PATCH) isteği
 export async function PATCH(request: Request) {
@@ -12,20 +13,36 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Fotoğraf ID eksik." }, { status: 400 });
     }
 
+    // Madde 3: Photo ID geçerli bir MongoDB ObjectId mi kontrol et
+    if (!mongoose.Types.ObjectId.isValid(photoId)) {
+      return NextResponse.json({ error: "Geçersiz Fotoğraf ID." }, { status: 400 });
+    }
+
     await connectToDatabase();
 
-    // Fotoğrafı bul ve isFavorite durumunu müşteriden gelen yeni durumla güncelle
-    const updatedPhoto = await Photo.findByIdAndUpdate(
-      photoId,
-      { isFavorite: isFavorite },
-      { new: true } // Güncellenmiş halini geri dönmesi için
-    );
-
-    if (!updatedPhoto) {
+    // 1. Önce fotoğrafı bul ki hangi galeriye ait olduğunu bilelim
+    const photo = await Photo.findById(photoId);
+    if (!photo) {
       return NextResponse.json({ error: "Fotoğraf bulunamadı." }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: updatedPhoto });
+    // 2. Madde 2: Galeri kilitli mi diye kontrol et!
+    const gallery = await Gallery.findById(photo.galleryId).lean();
+    if (!gallery) {
+      return NextResponse.json({ error: "Bağlı galeri bulunamadı." }, { status: 404 });
+    }
+
+    if (gallery.isSelectionCompleted) {
+      return NextResponse.json({ 
+        error: "Bu galeri için seçimler tamamlanmış ve kilitlenmiştir. Değişiklik yapılamaz." 
+      }, { status: 403 });
+    }
+
+    // 3. Her şey güvenliyse fotoğrafın favori durumunu güncelle
+    photo.isFavorite = isFavorite;
+    await photo.save();
+
+    return NextResponse.json({ success: true, data: photo });
 
   } catch (error) {
     console.error("Favori Güncelleme Hatası:", error);

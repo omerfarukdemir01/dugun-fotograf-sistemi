@@ -404,7 +404,8 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
                       )
                     ) : (
                       <div className={`absolute top-3 right-3 md:top-4 md:right-4 z-10 transition-opacity duration-500 ${photo.isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                        <button onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
+                        {/* 1. Aria-label Eklendi: Favori Seçme Butonu */}
+                        <button aria-label={photo.isFavorite ? "Favorilerden Çıkar" : "Favorilere Ekle"} onClick={(e) => handleToggleFavorite(e, photo._id, !!photo.isFavorite)} className={`flex h-10 w-10 md:h-11 md:w-11 items-center justify-center rounded-full backdrop-blur-md transition-all duration-300 ${photo.isFavorite ? 'bg-rose-400/90 text-white scale-110 shadow-[0_4px_15px_rgba(251,113,133,0.3)]' : 'bg-white/60 text-stone-500 hover:bg-white/90 hover:scale-110 hover:text-rose-400 shadow-sm'}`}>
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>
                         </button>
                       </div>
@@ -429,10 +430,12 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
 
       {selectedPhoto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111111]/95 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPhotoId(null)}>
-          <button className="absolute top-8 right-8 text-stone-400 hover:text-white text-sm tracking-widest uppercase z-50 transition-colors" onClick={() => setSelectedPhotoId(null)}>Kapat ✕</button>
+          {/* 2. Aria-label Eklendi: Modal Kapatma Butonu */}
+          <button aria-label="Tam ekran görünümü kapat" className="absolute top-8 right-8 text-stone-400 hover:text-white text-sm tracking-widest uppercase z-50 transition-colors" onClick={() => setSelectedPhotoId(null)}>Kapat ✕</button>
           
           {selectedIndex > 0 && (
-            <button onClick={handlePrev} className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
+            /* 3. Aria-label Eklendi: Önceki Fotoğraf Butonu */
+            <button aria-label="Önceki fotoğraf" onClick={handlePrev} className="absolute left-4 sm:left-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
             </button>
           )}
@@ -464,7 +467,8 @@ export default function CustomerGalleryClient({ galleryId }: { galleryId: string
           </div>
 
           {selectedIndex < displayedPhotos.length - 1 && (
-            <button onClick={handleNext} className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
+            /* 4. Aria-label Eklendi: Sonraki Fotoğraf Butonu */
+            <button aria-label="Sonraki fotoğraf" onClick={handleNext} className="absolute right-4 sm:right-12 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-50">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
             </button>
           )}
