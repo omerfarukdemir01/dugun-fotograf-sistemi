@@ -14,21 +14,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Şifre girilmedi." }, { status: 400 });
     }
 
-    const adminHash = process.env.ADMIN_PASSWORD_HASH;
+    // Environment değişkenleri kontrolü (Hem düz şifre hem Hash destekli)
+    const envPasswordHash = process.env.ADMIN_PASSWORD_HASH || process.env.ADMIN_PASSWORD || "";
 
-    if (!adminHash) {
-      return NextResponse.json({ success: false, error: "Sunucu hatası." }, { status: 500 });
+    if (!envPasswordHash) {
+      return NextResponse.json({ success: false, error: "Sunucu hatası: Sistemde şifre tanımlı değil." }, { status: 500 });
     }
 
-    // Girilen şifreyi güvenli hash ile karşılaştır
-    const isMatch = await bcrypt.compare(password, adminHash);
+    let isMatch = false;
+
+    // Eğer şifre bcrypt formatındaysa ( $2a$ veya $2b$ ile başlar)
+    if (envPasswordHash.startsWith("$2a$") || envPasswordHash.startsWith("$2b$")) {
+      isMatch = await bcrypt.compare(password, envPasswordHash);
+    } else {
+      // Düz metin olarak tanımlandıysa direkt karşılaştır
+      isMatch = password === envPasswordHash;
+    }
 
     if (!isMatch) {
       return NextResponse.json({ success: false, error: "Şifre yanlış." }, { status: 401 });
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("Verify Password Error:", error);
     return NextResponse.json({ success: false, error: "Sunucu hatası." }, { status: 500 });
   }
 }
